@@ -26,6 +26,8 @@ Mahmoud Khalil Al-Husary — Murattal is the default reciter. Quran text, transl
 - Read the translation or load a Quran.com Tafsir for the current Ayah.
 - Copy a practice link that restores the Surahs, reciter, language, repetition rules, and display mode.
 - Install the browser app as a PWA and reuse previously loaded app data offline.
+- Manually download selected Surahs for reliable offline audio, with progress and per-reciter status.
+- Remove downloaded audio from the device without clearing practice settings or quiz history.
 - Use the responsive interface on mobile and desktop.
 - Switch the interface between English and Arabic with full RTL support.
 - Cache API responses and audio for faster repeat sessions.
@@ -44,6 +46,14 @@ Then repeat the full selection if another cycle is configured
 ```
 
 Setting Ayah repeats to two changes every pass to `1, 1, 2, 2, 3, 3…`. The Ayah pause applies between those playbacks; the Surah pause applies only before another complete pass of the same Surah.
+
+## Offline listening
+
+Open the browser app's **Downloads** tab, choose a reciter and one or more Surahs, then select **Download selected**. The app downloads every Ayah with visible progress, reports the selected download and total cache sizes, and marks completed Surahs as **Offline** for that reciter. Download selection is separate from practice selection. The session data and audio are stored in a dedicated browser cache so the installed PWA can play the same selection without a connection.
+
+Offline audio is reciter-specific: changing the reciter requires a separate download. Select **Remove downloads** to clear all manually downloaded session data and audio. This does not remove language preferences, practice settings, or adaptive quiz history.
+
+Each web build generates a new PWA cache version. Installed copies check for service-worker updates immediately and once per hour, activate new assets without waiting, remove the previous app-shell cache, and reload once to apply the update.
 
 ## Requirements
 

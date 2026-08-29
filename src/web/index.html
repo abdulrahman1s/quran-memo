@@ -20,9 +20,15 @@
           <span class="brand-mark" aria-hidden="true">ق</span>
           <span><strong data-i18n="brandName">Quran Memo</strong><small data-i18n="brandTagline">Listen. Repeat. Remember.</small></span>
         </a>
-        <div class="language-switch" role="group" aria-label="Language">
-          <button type="button" data-language="en" aria-pressed="true">EN</button>
-          <button type="button" data-language="ar" aria-pressed="false">العربية</button>
+        <nav class="main-tabs" aria-label="Main navigation">
+          <button id="practice-tab-button" type="button" aria-current="page"><span aria-hidden="true">▶</span><i data-i18n="practiceTab">Practice</i></button>
+          <button id="downloads-tab-button" type="button"><span aria-hidden="true">↓</span><i data-i18n="downloadsTab">Downloads</i></button>
+        </nav>
+        <div class="header-actions">
+          <div class="language-switch" role="group" aria-label="Language">
+            <button type="button" data-language="en" aria-pressed="true">EN</button>
+            <button type="button" data-language="ar" aria-pressed="false">العربية</button>
+          </div>
         </div>
       </header>
 
@@ -133,6 +139,66 @@
               </div>
               <div id="surah-list" class="surah-list" aria-label="Surah selection"></div>
               <div id="catalog-loading" class="loading-state"><span></span> <i data-i18n="loadingCatalog">Loading Quran catalog…</i></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="downloads-view" class="view downloads-view" hidden>
+          <div class="downloads-hero">
+            <p class="eyebrow" data-i18n="offlineListening">Offline listening</p>
+            <h1 data-i18n="downloadsTitle">Take your recitation anywhere.</h1>
+            <p data-i18n="downloadsDescription">Choose a reciter and download complete surahs for listening without a connection.</p>
+          </div>
+
+          <div class="downloads-layout">
+            <aside class="download-manager panel">
+              <div class="panel-heading">
+                <span>01</span>
+                <div><h2 data-i18n="downloadSettings">Download settings</h2><p data-i18n="downloadSettingsDescription">Audio is saved only on this device.</p></div>
+              </div>
+              <label class="field">
+                <span data-i18n="reciter">Reciter</span>
+                <select id="offline-reciter-select" aria-label="Offline reciter"></select>
+              </label>
+              <div class="offline-summary-card">
+                <span aria-hidden="true">↓</span>
+                <div><b id="offline-status" data-i18n="noOfflineDownloads">No downloaded surahs</b><small data-i18n="offlineStorageNote">Downloaded audio stays available to the installed app.</small></div>
+              </div>
+              <div class="offline-size-grid" aria-live="polite">
+                <div><span data-i18n="downloadSize">Selected download</span><b id="download-size-value">—</b></div>
+                <div><span data-i18n="cacheSize">Cache size</span><b id="cache-size-value">—</b></div>
+              </div>
+              <div class="download-selection-summary">
+                <span><b id="offline-selected-count">0</b> <span data-i18n="surahsSelected">surahs selected</span></span>
+                <button id="offline-clear-button" class="text-button" type="button" data-i18n="clear">Clear</button>
+              </div>
+              <div class="offline-actions">
+                <button id="download-button" class="primary-button" type="button" disabled>
+                  <span data-i18n="downloadSelected">Download selected</span><b class="button-icon" aria-hidden="true">↓</b>
+                </button>
+                <button id="remove-downloads-button" class="offline-button danger" type="button" disabled>
+                  <span aria-hidden="true">×</span><span class="button-label" data-i18n="removeDownloads">Remove downloads</span>
+                </button>
+              </div>
+              <div id="download-progress-wrap" class="download-progress" hidden>
+                <progress id="download-progress" value="0" max="1"></progress>
+                <small id="download-progress-label"></small>
+              </div>
+            </aside>
+
+            <section class="offline-surah-panel panel">
+              <div class="panel-heading">
+                <span>02</span>
+                <div><h2 data-i18n="chooseDownloads">Choose downloads</h2><p data-i18n="chooseDownloadsDescription">Select the complete surahs you want on this device.</p></div>
+              </div>
+              <div class="browser-toolbar">
+                <label class="search-box">
+                  <span aria-hidden="true">⌕</span>
+                  <input id="offline-surah-search" type="search" placeholder="Search Arabic, English, or number…" data-i18n-placeholder="searchSurahs" autocomplete="off" />
+                </label>
+                <button id="offline-select-visible-button" class="secondary-button" type="button" data-i18n="selectVisible">Select visible</button>
+              </div>
+              <div id="offline-surah-list" class="surah-list offline-surah-list" aria-label="Offline Surah selection"></div>
             </section>
           </div>
         </section>

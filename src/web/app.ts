@@ -136,6 +136,30 @@ const messages: Record<Language, Record<string, string>> = {
     adaptiveReview: "Adaptive review",
     ayahRepeatStatus: "Ayah repeat {current} / {total}",
     hiddenAyah: "Ayah hidden — listen and recite from memory",
+    offlineListening: "Offline listening",
+    noOfflineDownloads: "No downloaded surahs",
+    offlineCount: "{count} surahs downloaded",
+    offlineReady: "Offline",
+    downloadSelected: "Download selected",
+    removeDownloads: "Remove downloads",
+    downloadingAudio: "Downloading {current} of {total} ayahs…",
+    downloadComplete: "Selected surahs are ready offline.",
+    downloadFailed: "The offline download could not be completed.",
+    downloadsRemoved: "Offline audio removed.",
+    offlineUnsupported: "Offline downloads are not supported by this browser.",
+    partialOfflineDownload: "Some offline audio is cached — retry or remove it",
+    practiceTab: "Practice",
+    downloadsTab: "Downloads",
+    downloadsTitle: "Take your recitation anywhere.",
+    downloadsDescription: "Choose a reciter and download complete surahs for listening without a connection.",
+    downloadSettings: "Download settings",
+    downloadSettingsDescription: "Audio is saved only on this device.",
+    offlineStorageNote: "Downloaded audio stays available to the installed app.",
+    chooseDownloads: "Choose downloads",
+    chooseDownloadsDescription: "Select the complete surahs you want on this device.",
+    downloadSize: "Selected download",
+    cacheSize: "Cache size",
+    calculatingSize: "Calculating…",
   },
   ar: {
     brandName: "حفظ القرآن",
@@ -223,6 +247,30 @@ const messages: Record<Language, Record<string, string>> = {
     adaptiveReview: "مراجعة تكيفية",
     ayahRepeatStatus: "تكرار الآية {current} / {total}",
     hiddenAyah: "الآية مخفية — استمع وردد من حفظك",
+    offlineListening: "الاستماع دون إنترنت",
+    noOfflineDownloads: "لا توجد سور محمّلة",
+    offlineCount: "تم تحميل {count} سورة",
+    offlineReady: "متاحة دون إنترنت",
+    downloadSelected: "تحميل السور المختارة",
+    removeDownloads: "حذف التحميلات",
+    downloadingAudio: "جارٍ تحميل الآية {current} من {total}…",
+    downloadComplete: "السور المختارة جاهزة للاستماع دون إنترنت.",
+    downloadFailed: "تعذر إكمال التحميل دون إنترنت.",
+    downloadsRemoved: "تم حذف الصوت المحمّل.",
+    offlineUnsupported: "هذا المتصفح لا يدعم التحميل دون إنترنت.",
+    partialOfflineDownload: "تم حفظ جزء من الصوت — أعد المحاولة أو احذفه",
+    practiceTab: "المراجعة",
+    downloadsTab: "التحميلات",
+    downloadsTitle: "خذ تلاوتك معك أينما كنت.",
+    downloadsDescription: "اختر القارئ وحمّل سورًا كاملة للاستماع دون اتصال بالإنترنت.",
+    downloadSettings: "إعدادات التحميل",
+    downloadSettingsDescription: "يُحفظ الصوت على هذا الجهاز فقط.",
+    offlineStorageNote: "يبقى الصوت المحمّل متاحًا في التطبيق المثبّت.",
+    chooseDownloads: "اختر السور للتحميل",
+    chooseDownloadsDescription: "حدد السور الكاملة التي تريد حفظها على هذا الجهاز.",
+    downloadSize: "حجم التحميل المحدد",
+    cacheSize: "حجم التخزين",
+    calculatingSize: "جارٍ الحساب…",
   },
 };
 
@@ -241,6 +289,7 @@ function t(key: string, values: Record<string, string | number> = {}): string {
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const setupView = element<HTMLElement>("setup-view");
+const downloadsView = element<HTMLElement>("downloads-view");
 const playerView = element<HTMLElement>("player-view");
 const reciterSelect = element<HTMLSelectElement>("reciter-select");
 const reciterPicker = element<HTMLElement>("reciter-picker");
@@ -273,6 +322,35 @@ const toast = element<HTMLElement>("toast");
 const quizPanel = element<HTMLElement>("quiz-panel");
 const quizOptions = element<HTMLElement>("quiz-options");
 const quizResult = element<HTMLElement>("quiz-result");
+const downloadButton = element<HTMLButtonElement>("download-button");
+const removeDownloadsButton = element<HTMLButtonElement>("remove-downloads-button");
+const offlineStatus = element<HTMLElement>("offline-status");
+const downloadProgressWrap = element<HTMLElement>("download-progress-wrap");
+const downloadProgress = element<HTMLProgressElement>("download-progress");
+const downloadProgressLabel = element<HTMLElement>("download-progress-label");
+const offlineReciterSelect = element<HTMLSelectElement>("offline-reciter-select");
+const offlineSearchInput = element<HTMLInputElement>("offline-surah-search");
+const offlineSurahList = element<HTMLElement>("offline-surah-list");
+const offlineSelectedCount = element<HTMLElement>("offline-selected-count");
+const offlineClearButton = element<HTMLButtonElement>("offline-clear-button");
+const offlineSelectVisibleButton = element<HTMLButtonElement>("offline-select-visible-button");
+const downloadSizeValue = element<HTMLElement>("download-size-value");
+const cacheSizeValue = element<HTMLElement>("cache-size-value");
+
+const OFFLINE_AUDIO_CACHE = "quran-memo-offline-audio-v1";
+const OFFLINE_MANIFEST_KEY = "quran-memo-offline-downloads-v1";
+const OFFLINE_PRESENT_KEY = "quran-memo-offline-cache-present";
+const OFFLINE_CACHE_BYTES_KEY = "quran-memo-offline-cache-bytes";
+
+interface OfflineDownload {
+  chapterId: number;
+  reciterId: number;
+  audioUrls: string[];
+  downloadedAt: number;
+  bytes?: number;
+}
+
+type OfflineManifest = Record<string, OfflineDownload>;
 
 interface CustomSelectController {
   root: HTMLElement;
@@ -360,7 +438,7 @@ function enhanceSelect(select: HTMLSelectElement): CustomSelectController {
   return { root, refresh, close };
 }
 
-for (const select of [cyclesSelect, memorizationSelect, element<HTMLSelectElement>("tafsir-select")]) {
+for (const select of [cyclesSelect, memorizationSelect, offlineReciterSelect, element<HTMLSelectElement>("tafsir-select")]) {
   customSelectControllers.set(select, enhanceSelect(select));
 }
 
@@ -373,6 +451,8 @@ let reciters: Reciter[] = [];
 let tafsirs: TafsirResource[] = [];
 let visibleChapters: Chapter[] = [];
 const selectedIds = new Set<number>();
+const offlineSelectedIds = new Set<number>();
+let offlineVisibleChapters: Chapter[] = [];
 let session: SessionGroup[] = [];
 let surahIndex = 0;
 let verseIndex = 0;
@@ -397,6 +477,88 @@ let quizReviewQueue: Array<{ surahIndex: number; verseIndex: number }> = [];
 let quizInReview = false;
 let tafsirRequest = 0;
 let lastRenderedVerseKey = "";
+let offlineManifest = loadOfflineManifest();
+let offlineCachePresent = localStorage.getItem(OFFLINE_PRESENT_KEY) === "true";
+let offlineCacheBytes = Math.max(0, Number(localStorage.getItem(OFFLINE_CACHE_BYTES_KEY)) || 0);
+let downloadInProgress = false;
+
+function offlineKey(reciterId: number, chapterId: number): string {
+  return `${reciterId}:${chapterId}`;
+}
+
+function loadOfflineManifest(): OfflineManifest {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(OFFLINE_MANIFEST_KEY) ?? "{}");
+    return parsed && typeof parsed === "object" ? parsed as OfflineManifest : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveOfflineManifest(): void {
+  localStorage.setItem(OFFLINE_MANIFEST_KEY, JSON.stringify(offlineManifest));
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 1) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** power;
+  return `${new Intl.NumberFormat(currentLanguage, { maximumFractionDigits: power === 0 ? 0 : 1 }).format(value)} ${units[power]}`;
+}
+
+async function responseBytes(response: Response): Promise<number> {
+  const header = Number(response.headers.get("content-length"));
+  return Number.isFinite(header) && header >= 0 ? header : (await response.clone().blob()).size;
+}
+
+async function refreshOfflineCacheSize(): Promise<void> {
+  if (!("caches" in window)) return;
+  cacheSizeValue.textContent = t("calculatingSize");
+  try {
+    const cache = await caches.open(OFFLINE_AUDIO_CACHE);
+    const requests = await cache.keys();
+    let bytes = 0;
+    for (const request of requests) {
+      const response = await cache.match(request);
+      if (response) bytes += await responseBytes(response);
+    }
+    offlineCacheBytes = bytes;
+    offlineCachePresent = requests.length > 0;
+    localStorage.setItem(OFFLINE_CACHE_BYTES_KEY, String(bytes));
+    localStorage.setItem(OFFLINE_PRESENT_KEY, String(offlineCachePresent));
+  } catch (error) {
+    console.error(error);
+  }
+  cacheSizeValue.textContent = formatBytes(offlineCacheBytes);
+  updateOfflineControls();
+}
+
+function downloadedForReciter(chapterId: number, reciterId = Number(reciterSelect.value)): boolean {
+  return Boolean(offlineManifest[offlineKey(reciterId, chapterId)]);
+}
+
+function updateOfflineControls(): void {
+  const supported = "caches" in window;
+  const count = Object.keys(offlineManifest).length;
+  offlineStatus.textContent = count
+    ? t("offlineCount", { count })
+    : offlineCachePresent ? t("partialOfflineDownload") : t("noOfflineDownloads");
+  offlineSelectedCount.textContent = String(offlineSelectedIds.size);
+  const reciterId = Number(offlineReciterSelect.value);
+  const selectedDownloads = [...offlineSelectedIds]
+    .map((chapterId) => offlineManifest[offlineKey(reciterId, chapterId)]);
+  const knownSelectionBytes = selectedDownloads.reduce((total, item) => total + (item?.bytes ?? 0), 0);
+  if (!downloadInProgress) {
+    downloadSizeValue.textContent = selectedDownloads.length === offlineSelectedIds.size && offlineSelectedIds.size > 0
+      ? formatBytes(knownSelectionBytes)
+      : "—";
+  }
+  cacheSizeValue.textContent = formatBytes(offlineCacheBytes);
+  downloadButton.disabled = !supported || offlineSelectedIds.size === 0 || downloadInProgress;
+  removeDownloadsButton.disabled = !supported || !offlineCachePresent || downloadInProgress;
+  offlineClearButton.disabled = offlineSelectedIds.size === 0 || downloadInProgress;
+}
 
 function loadTransitionScores(): TransitionScores {
   try {
@@ -476,6 +638,8 @@ function renderReciterOptions(): void {
       reciterSelect.value = String(reciter.id);
       updateReciterTrigger();
       renderReciterOptions();
+      renderSurahs();
+      updateOfflineControls();
       closeReciterMenu();
       reciterTrigger.focus();
     });
@@ -523,14 +687,21 @@ function applyLanguage(language: Language): void {
   if (reciters.length) {
     updateReciterTrigger();
     renderReciterOptions();
+    for (const option of offlineReciterSelect.options) {
+      const reciter = reciters.find((item) => item.id === Number(option.value));
+      if (reciter) option.textContent = reciterLabel(reciter);
+    }
+    refreshCustomSelect(offlineReciterSelect);
   }
   if (tafsirs.length) renderTafsirOptions(true);
   refreshCustomSelect(cyclesSelect);
   refreshCustomSelect(memorizationSelect);
   if (chapters.length) {
     renderSurahs();
+    renderOfflineSurahs();
     renderSelection();
   }
+  updateOfflineControls();
   const activeGroup = session[surahIndex];
   if (activeGroup?.verses[verseIndex]) updatePlayerView();
 }
@@ -640,12 +811,16 @@ async function loadCatalog(): Promise<void> {
       option.textContent = reciterLabel(reciter);
       option.selected = reciter.id === catalog.defaultReciterId;
       reciterSelect.append(option);
+      offlineReciterSelect.append(option.cloneNode(true));
     }
     restoreSharedPractice();
     updateReciterTrigger();
     renderReciterOptions();
     catalogLoading.hidden = true;
     renderSurahs();
+    refreshCustomSelect(offlineReciterSelect);
+    renderOfflineSurahs();
+    void refreshOfflineCacheSize();
   } catch (error) {
     console.error(error);
     catalogLoading.textContent = t("catalogFailed");
@@ -669,6 +844,7 @@ function renderSurahs(): void {
   const fragment = document.createDocumentFragment();
   for (const chapter of visibleChapters) {
     const selected = selectedIds.has(chapter.id);
+    const downloaded = downloadedForReciter(chapter.id);
     const primaryName = currentLanguage === "ar" ? chapter.nameArabic : chapter.nameSimple;
     const secondaryName = currentLanguage === "ar" ? chapter.nameSimple : chapter.nameArabic;
     const button = document.createElement("button");
@@ -679,7 +855,7 @@ function renderSurahs(): void {
     button.innerHTML = `
       <span class="surah-check" aria-hidden="true">${selected ? "✓" : ""}</span>
       <span class="surah-number">${String(chapter.id).padStart(3, "0")}</span>
-      <span class="surah-names"><b>${primaryName}</b><small>${chapter.versesCount} ${t("ayahs")}</small></span>
+      <span class="surah-names"><b>${primaryName}</b><small>${chapter.versesCount} ${t("ayahs")}${downloaded ? ` · ${t("offlineReady")}` : ""}</small></span>
       <strong class="surah-arabic" translate="no">${secondaryName}</strong>
     `;
     button.addEventListener("click", () => {
@@ -692,6 +868,44 @@ function renderSurahs(): void {
   surahList.append(fragment);
 }
 
+function renderOfflineSurahs(): void {
+  const filter = offlineSearchInput.value.trim().toLocaleLowerCase();
+  const reciterId = Number(offlineReciterSelect.value);
+  offlineVisibleChapters = chapters.filter((chapter) =>
+    !filter
+    || String(chapter.id).includes(filter)
+    || chapter.nameSimple.toLocaleLowerCase().includes(filter)
+    || chapter.nameArabic.includes(filter)
+  );
+  offlineSurahList.replaceChildren();
+  const fragment = document.createDocumentFragment();
+  for (const chapter of offlineVisibleChapters) {
+    const selected = offlineSelectedIds.has(chapter.id);
+    const downloaded = downloadedForReciter(chapter.id, reciterId);
+    const primaryName = currentLanguage === "ar" ? chapter.nameArabic : chapter.nameSimple;
+    const secondaryName = currentLanguage === "ar" ? chapter.nameSimple : chapter.nameArabic;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `surah-card${selected ? " selected" : ""}${downloaded ? " downloaded" : ""}`;
+    button.setAttribute("role", "checkbox");
+    button.setAttribute("aria-checked", String(selected));
+    button.innerHTML = `
+      <span class="surah-check" aria-hidden="true">${selected ? "✓" : ""}</span>
+      <span class="surah-number">${String(chapter.id).padStart(3, "0")}</span>
+      <span class="surah-names"><b>${primaryName}</b><small>${chapter.versesCount} ${t("ayahs")}${downloaded ? ` · ${t("offlineReady")}` : ""}</small></span>
+      <strong class="surah-arabic" translate="no">${secondaryName}</strong>
+    `;
+    button.addEventListener("click", () => {
+      selected ? offlineSelectedIds.delete(chapter.id) : offlineSelectedIds.add(chapter.id);
+      renderOfflineSurahs();
+      updateOfflineControls();
+    });
+    fragment.append(button);
+  }
+  offlineSurahList.append(fragment);
+  updateOfflineControls();
+}
+
 function renderSelection(): void {
   const selected = chapters.filter((chapter) => selectedIds.has(chapter.id));
   selectedCount.textContent = String(selected.length);
@@ -699,6 +913,7 @@ function renderSelection(): void {
   quizButton.disabled = selected.length === 0;
   clearButton.disabled = selected.length === 0;
   shareButton.disabled = selected.length === 0;
+  updateOfflineControls();
   selectedChips.replaceChildren();
   for (const chapter of selected.slice(0, 5)) {
     const chip = document.createElement("span");
@@ -709,6 +924,152 @@ function renderSelection(): void {
     const more = document.createElement("span");
     more.textContent = t("more", { count: selected.length - 5 });
     selectedChips.append(more);
+  }
+}
+
+function stopPlaybackForNavigation(): void {
+  window.clearTimeout(delayTimer);
+  window.cancelAnimationFrame(highlightFrame ?? 0);
+  window.speechSynthesis?.cancel();
+  audio.pause();
+  audio.removeAttribute("src");
+  isPlaying = false;
+}
+
+function showMainTab(tab: "practice" | "downloads"): void {
+  if (!playerView.hidden) stopPlaybackForNavigation();
+  setupView.hidden = tab !== "practice";
+  downloadsView.hidden = tab !== "downloads";
+  playerView.hidden = true;
+  element<HTMLButtonElement>("practice-tab-button").toggleAttribute("aria-current", tab === "practice");
+  element<HTMLButtonElement>("downloads-tab-button").toggleAttribute("aria-current", tab === "downloads");
+  if (tab === "downloads") renderOfflineSurahs();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function fetchSessionForOffline(
+  chapterIds: number[],
+  reciterId: number,
+): Promise<{ groups: SessionGroup[]; quizPool: QuizChoice[] }> {
+  const params = new URLSearchParams({
+    surahs: chapterIds.join(","),
+    reciter: String(reciterId),
+  });
+  const request = new Request(new URL(`/api/session?${params}`, window.location.origin));
+  const response = await fetch(request);
+  const data = await response.clone().json() as { groups?: SessionGroup[]; quizPool?: QuizChoice[]; error?: string };
+  if (!response.ok || !data.groups) {
+    throw new Error(data.error || `Request failed with HTTP ${response.status}`);
+  }
+  const cache = await caches.open(OFFLINE_AUDIO_CACHE);
+  await cache.put(request, response);
+  return { groups: data.groups, quizPool: data.quizPool ?? [] };
+}
+
+async function mapWithConcurrency<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      if (item !== undefined) await task(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+async function downloadSelectedSurahs(): Promise<void> {
+  if (!("caches" in window)) {
+    showToast(t("offlineUnsupported"), true);
+    return;
+  }
+  const selected = chapters.filter((chapter) => offlineSelectedIds.has(chapter.id));
+  if (!selected.length || downloadInProgress) return;
+  const reciterId = Number(offlineReciterSelect.value);
+
+  downloadInProgress = true;
+  updateOfflineControls();
+  downloadProgressWrap.hidden = false;
+  downloadProgress.value = 0;
+  downloadProgressLabel.textContent = t("preparing");
+  downloadSizeValue.textContent = "0 B";
+  try {
+    await navigator.storage?.persist?.().catch(() => false);
+    const parts: Array<{ groups: SessionGroup[]; quizPool: QuizChoice[] }> = [];
+    for (const batch of batchChapters(selected)) {
+      parts.push(await fetchSessionForOffline(batch.map((chapter) => chapter.id), reciterId));
+    }
+    const groups = parts.flatMap((part) => part.groups);
+    const verses = groups.flatMap((group) => group.verses);
+    downloadProgress.max = Math.max(1, verses.length);
+    const cache = await caches.open(OFFLINE_AUDIO_CACHE);
+    let completed = 0;
+    let downloadedBytes = 0;
+    const verseSizes = new Map<string, number>();
+    await mapWithConcurrency(verses, 3, async (verse) => {
+      const request = new Request(verse.audioUrl);
+      const cached = await cache.match(request);
+      let bytes: number;
+      if (!cached) {
+        const response = await fetch(request, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Audio request failed with HTTP ${response.status}`);
+        bytes = await responseBytes(response);
+        await cache.put(request, response);
+      } else {
+        bytes = await responseBytes(cached);
+      }
+      verseSizes.set(verse.audioUrl, bytes);
+      downloadedBytes += bytes;
+      offlineCachePresent = true;
+      localStorage.setItem(OFFLINE_PRESENT_KEY, "true");
+      completed += 1;
+      downloadProgress.value = completed;
+      downloadProgressLabel.textContent = t("downloadingAudio", { current: completed, total: verses.length });
+      downloadSizeValue.textContent = formatBytes(downloadedBytes);
+    });
+    for (const group of groups) {
+      offlineManifest[offlineKey(reciterId, group.chapter.id)] = {
+        chapterId: group.chapter.id,
+        reciterId,
+        audioUrls: group.verses.map((verse) => verse.audioUrl),
+        downloadedAt: Date.now(),
+        bytes: group.verses.reduce((total, verse) => total + (verseSizes.get(verse.audioUrl) ?? 0), 0),
+      };
+    }
+    saveOfflineManifest();
+    renderSurahs();
+    renderOfflineSurahs();
+    await refreshOfflineCacheSize();
+    showToast(t("downloadComplete"));
+  } catch (error) {
+    console.error(error);
+    showToast(t("downloadFailed"), true);
+  } finally {
+    downloadInProgress = false;
+    downloadProgressWrap.hidden = true;
+    updateOfflineControls();
+  }
+}
+
+async function removeOfflineDownloads(): Promise<void> {
+  if (!("caches" in window) || downloadInProgress) return;
+  removeDownloadsButton.disabled = true;
+  try {
+    await caches.delete(OFFLINE_AUDIO_CACHE);
+    offlineManifest = {};
+    offlineCachePresent = false;
+    offlineCacheBytes = 0;
+    localStorage.removeItem(OFFLINE_MANIFEST_KEY);
+    localStorage.removeItem(OFFLINE_PRESENT_KEY);
+    localStorage.removeItem(OFFLINE_CACHE_BYTES_KEY);
+    cacheSizeValue.textContent = formatBytes(0);
+    renderSurahs();
+    renderOfflineSurahs();
+    showToast(t("downloadsRemoved"));
+  } catch (error) {
+    console.error(error);
+    showToast(t("downloadFailed"), true);
+  } finally {
+    updateOfflineControls();
   }
 }
 
@@ -1137,6 +1498,8 @@ async function startSession(selectedMode: "practice" | "quiz"): Promise<void> {
 }
 
 searchInput.addEventListener("input", renderSurahs);
+offlineSearchInput.addEventListener("input", renderOfflineSurahs);
+offlineReciterSelect.addEventListener("change", renderOfflineSurahs);
 reciterTrigger.addEventListener("click", () => reciterMenu.hidden ? openReciterMenu() : closeReciterMenu());
 reciterSearch.addEventListener("input", renderReciterOptions);
 element("reciter-close").addEventListener("click", () => { closeReciterMenu(); reciterTrigger.focus(); });
@@ -1162,14 +1525,26 @@ ayahDelayInput.addEventListener("input", () => {
   ayahDelayValue.textContent = currentLanguage === "ar" ? `${ayahDelayInput.value} ث` : `${ayahDelayInput.value}s`;
 });
 clearButton.addEventListener("click", () => { selectedIds.clear(); renderSurahs(); renderSelection(); });
+offlineClearButton.addEventListener("click", () => { offlineSelectedIds.clear(); renderOfflineSurahs(); });
 selectVisibleButton.addEventListener("click", () => {
   const allSelected = visibleChapters.every((chapter) => selectedIds.has(chapter.id));
   for (const chapter of visibleChapters) allSelected ? selectedIds.delete(chapter.id) : selectedIds.add(chapter.id);
   renderSurahs();
   renderSelection();
 });
+offlineSelectVisibleButton.addEventListener("click", () => {
+  const allSelected = offlineVisibleChapters.every((chapter) => offlineSelectedIds.has(chapter.id));
+  for (const chapter of offlineVisibleChapters) {
+    allSelected ? offlineSelectedIds.delete(chapter.id) : offlineSelectedIds.add(chapter.id);
+  }
+  renderOfflineSurahs();
+});
+element("practice-tab-button").addEventListener("click", () => showMainTab("practice"));
+element("downloads-tab-button").addEventListener("click", () => showMainTab("downloads"));
 startButton.addEventListener("click", () => void startSession("practice"));
 quizButton.addEventListener("click", () => void startSession("quiz"));
+downloadButton.addEventListener("click", () => void downloadSelectedSurahs());
+removeDownloadsButton.addEventListener("click", () => void removeOfflineDownloads());
 shareButton.addEventListener("click", () => void copyPracticeLink());
 element("player-share-button").addEventListener("click", () => void copyPracticeLink());
 element("translation-tab").addEventListener("click", () => showStudyTab("translation"));
@@ -1180,14 +1555,8 @@ element("tafsir-select").addEventListener("change", () => {
 });
 element("retry-quiz-button").addEventListener("click", restartQuiz);
 element("back-button").addEventListener("click", () => {
-  window.clearTimeout(delayTimer);
-  window.cancelAnimationFrame(highlightFrame ?? 0);
-  window.speechSynthesis?.cancel();
-  audio.pause();
-  audio.removeAttribute("src");
-  setupView.hidden = false;
-  playerView.hidden = true;
-  isPlaying = false;
+  stopPlaybackForNavigation();
+  showMainTab("practice");
 });
 playButton.addEventListener("click", () => {
   if (isPlaying) {
@@ -1221,5 +1590,13 @@ applyLanguage(currentLanguage);
 void loadCatalog();
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js").catch(console.error));
+  window.addEventListener("load", () => void (async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+      await registration.update();
+      window.setInterval(() => void registration.update().catch(console.error), 60 * 60 * 1_000);
+    } catch (error) {
+      console.error(error);
+    }
+  })());
 }

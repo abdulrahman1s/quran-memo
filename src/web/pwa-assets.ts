@@ -17,8 +17,11 @@ export const pwaIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512
   <text x="256" y="348" text-anchor="middle" font-family="serif" font-size="270" font-weight="700" fill="#132019">ق</text>
 </svg>`;
 
+const pwaBuildVersion = Date.now().toString(36);
+
 export const serviceWorkerSource = `
-const VERSION = "quran-memo-pwa-v2";
+const VERSION = "quran-memo-pwa-${pwaBuildVersion}";
+const OFFLINE_AUDIO = "quran-memo-offline-audio-v1";
 const SHELL = ["./", "./styles.css", "./manifest.webmanifest", "./icon.svg"];
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(VERSION).then((cache) => Promise.all(
@@ -26,9 +29,16 @@ self.addEventListener("install", (event) => {
   )).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(
-    keys.filter((key) => key.startsWith("quran-memo-pwa-") && key !== VERSION).map((key) => caches.delete(key))
-  )).then(() => self.clients.claim()));
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    const previous = keys.filter((key) => key.startsWith("quran-memo-pwa-") && key !== VERSION);
+    await Promise.all(previous.map((key) => caches.delete(key)));
+    await self.clients.claim();
+    if (previous.length) {
+      const clients = await self.clients.matchAll({ type: "window" });
+      await Promise.all(clients.map((client) => client.navigate(client.url)));
+    }
+  })());
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;
@@ -38,13 +48,19 @@ self.addEventListener("fetch", (event) => {
   const dynamic = url.pathname.startsWith("/api/");
   event.respondWith((async () => {
     const cache = await caches.open(VERSION);
+    const offline = await caches.open(OFFLINE_AUDIO);
+    if (url.pathname === "/api/audio") {
+      const downloaded = await offline.match(request);
+      if (downloaded) return downloaded;
+      return fetch(request);
+    }
     if (dynamic) {
       try {
         const response = await fetch(request);
         if (response.ok && !request.headers.has("range")) await cache.put(request, response.clone());
         return response;
       } catch (error) {
-        const cached = await cache.match(request);
+        const cached = await offline.match(request) || await cache.match(request);
         if (cached) return cached;
         throw error;
       }
