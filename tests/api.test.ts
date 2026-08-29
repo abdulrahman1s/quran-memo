@@ -103,3 +103,22 @@ test("Al-Husary ID 6 is identified as the default Murattal recitation", async ()
     style: "Murattal",
   }]);
 });
+
+test("Tafsir resources and verse text are normalized", async () => {
+  const client = new QuranClient(async (input) => {
+    const url = new URL(String(input));
+    const path = url.pathname;
+    return path.endsWith("/resources/tafsirs")
+      ? Response.json({ tafsirs: [{
+          id: 169,
+          name: "Tafsir",
+          language_name: "english",
+          translated_name: { name: url.searchParams.get("language") === "ar" ? "التفسير" : "Tafsir" },
+        }] })
+      : Response.json({ tafsir: { text: "Meaning <sup>1</sup>&amp; context" } });
+  });
+  expect(await client.tafsirs()).toEqual([{
+    id: 169, nameEnglish: "Tafsir", nameArabic: "التفسير", languageName: "english",
+  }]);
+  expect(await client.tafsirForVerse(169, "1:1")).toBe("Meaning & context");
+});

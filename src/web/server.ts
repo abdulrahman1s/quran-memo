@@ -2,6 +2,7 @@ import index from "./index.html";
 import { DEFAULT_RECITER_ID, QuranClient } from "../api.ts";
 import { DiskCache } from "../cache.ts";
 import { parseSurahSpec } from "../args.ts";
+import { pwaIcon, pwaManifest, serviceWorkerSource } from "./pwa-assets.ts";
 
 interface WebServerOptions {
   port: number;
@@ -63,11 +64,22 @@ export function startWebServer({ port, cache }: WebServerOptions) {
     port,
     routes: {
       "/": index,
+      "/manifest.webmanifest": new Response(pwaManifest, {
+        headers: { "content-type": "application/manifest+json", "cache-control": "no-cache" },
+      }),
+      "/icon.svg": new Response(pwaIcon, {
+        headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" },
+      }),
+      "/sw.js": new Response(serviceWorkerSource, {
+        headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" },
+      }),
       "/api/catalog": {
         GET: async () => {
           try {
-            const [chapters, reciters] = await Promise.all([api.chapters(), api.reciters()]);
-            return json({ chapters, reciters, defaultReciterId: DEFAULT_RECITER_ID }, {
+            const [chapters, reciters, tafsirs] = await Promise.all([
+              api.chapters(), api.reciters(), api.tafsirs().catch(() => []),
+            ]);
+            return json({ chapters, reciters, tafsirs, defaultReciterId: DEFAULT_RECITER_ID }, {
               headers: { "cache-control": "private, max-age=300" },
             });
           } catch (error) {
@@ -125,6 +137,20 @@ export function startWebServer({ port, cache }: WebServerOptions) {
             return audioFileResponse(request, path);
           } catch (error) {
             return errorResponse(error, 404);
+          }
+        },
+      },
+      "/api/tafsir": {
+        GET: async (request) => {
+          try {
+            const url = new URL(request.url);
+            const tafsirId = positiveQuery(url.searchParams.get("tafsir"), "Tafsir");
+            const verseKey = url.searchParams.get("verse") ?? "";
+            return json({ text: await api.tafsirForVerse(tafsirId, verseKey) }, {
+              headers: { "cache-control": "private, max-age=86400" },
+            });
+          } catch (error) {
+            return errorResponse(error, 400);
           }
         },
       },

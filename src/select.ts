@@ -176,6 +176,10 @@ function delayWithDefault(value: string, fallback: number): number {
 }
 
 export async function completeSessionConfig(partial: Partial<SessionConfig>): Promise<SessionConfig> {
+  const ayahRepeats = partial.ayahRepeats ?? await askUntil(
+    "Repeat each ayah [1]: ",
+    (value) => positiveIntegerWithDefault(value, 1, "Ayah repeat count"),
+  );
   const surahRepeats = partial.surahRepeats ?? await askUntil(
     "Repeat each complete surah [3]: ",
     (value) => positiveIntegerWithDefault(value, 3, "Repeat count"),
@@ -188,5 +192,9 @@ export async function completeSessionConfig(partial: Partial<SessionConfig>): Pr
     "Delay between surah repeats in seconds [0]: ",
     (value) => delayWithDefault(value, 0),
   );
-  return { surahRepeats, cycles, delaySeconds };
+  const ayahDelaySeconds = partial.ayahDelaySeconds ?? await askUntil(
+    "Delay after each ayah in seconds [0]: ",
+    (value) => delayWithDefault(value, 0),
+  );
+  return { ayahRepeats, surahRepeats, cycles, ayahDelaySeconds, delaySeconds };
 }

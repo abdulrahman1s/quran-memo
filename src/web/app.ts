@@ -2,6 +2,14 @@ import { accuracy, buildQuizChoices, type QuizChoice } from "./quiz.ts";
 import { quizStepAfterAudio } from "./session.ts";
 import { activeWordPosition } from "./timing.ts";
 import { batchChapters } from "./batching.ts";
+import { memorizationWords } from "./memorization.ts";
+import { decodePracticeLink, encodePracticeLink, type MemorizationLevel } from "./practice-link.ts";
+import {
+  recordTransition,
+  transitionKey,
+  weakestTransitions,
+  type TransitionScores,
+} from "./adaptive.ts";
 
 interface Chapter {
   id: number;
@@ -15,6 +23,13 @@ interface Reciter {
   nameEnglish: string;
   nameArabic: string;
   style: string | null;
+}
+
+interface TafsirResource {
+  id: number;
+  nameEnglish: string;
+  nameArabic: string;
+  languageName: string;
 }
 
 interface Verse {
@@ -48,6 +63,7 @@ const messages: Record<Language, Record<string, string>> = {
     chooseReciter: "Choose a reciter",
     searchReciters: "Search reciters…",
     surahRepeats: "Surah repeats",
+    ayahRepeats: "Ayah repeats",
     fullCycles: "Full cycles",
     oneCycle: "1 cycle",
     twoCycles: "2 cycles",
@@ -55,6 +71,12 @@ const messages: Record<Language, Record<string, string>> = {
     fiveCycles: "5 cycles",
     forever: "Forever",
     pauseBetween: "Pause between surah repeats",
+    pauseAfterAyah: "Pause after each ayah",
+    memorizationMode: "Memorization display",
+    memoryFull: "Full ayah",
+    memoryFirstWords: "First 3 words",
+    memoryInitials: "Word initials",
+    memoryHidden: "Hidden",
     surahsSelected: "surahs selected",
     clear: "Clear",
     beginListening: "Begin listening",
@@ -103,6 +125,17 @@ const messages: Record<Language, Record<string, string>> = {
     closeReciter: "Close reciter picker",
     availableReciters: "Available reciters",
     sessionUnavailable: "This session could not be prepared. Please try again.",
+    copyPracticeLink: "Copy practice link",
+    shareSession: "Share session",
+    linkCopied: "Practice link copied.",
+    translation: "Translation",
+    tafsir: "Tafsir",
+    chooseTafsir: "Choose a Tafsir source to read its explanation.",
+    loadingTafsir: "Loading Tafsir…",
+    tafsirUnavailable: "Tafsir could not be loaded.",
+    adaptiveReview: "Adaptive review",
+    ayahRepeatStatus: "Ayah repeat {current} / {total}",
+    hiddenAyah: "Ayah hidden — listen and recite from memory",
   },
   ar: {
     brandName: "حفظ القرآن",
@@ -117,6 +150,7 @@ const messages: Record<Language, Record<string, string>> = {
     chooseReciter: "اختر القارئ",
     searchReciters: "ابحث عن قارئ…",
     surahRepeats: "تكرار السورة",
+    ayahRepeats: "تكرار الآية",
     fullCycles: "دورات المجموعة",
     oneCycle: "دورة واحدة",
     twoCycles: "دورتان",
@@ -124,6 +158,12 @@ const messages: Record<Language, Record<string, string>> = {
     fiveCycles: "٥ دورات",
     forever: "بلا توقف",
     pauseBetween: "التوقف بين تكرارات السورة",
+    pauseAfterAyah: "التوقف بعد كل آية",
+    memorizationMode: "عرض الحفظ",
+    memoryFull: "الآية كاملة",
+    memoryFirstWords: "أول ٣ كلمات",
+    memoryInitials: "أوائل الكلمات",
+    memoryHidden: "إخفاء الآية",
     surahsSelected: "سور مختارة",
     clear: "مسح",
     beginListening: "ابدأ الاستماع",
@@ -172,10 +212,24 @@ const messages: Record<Language, Record<string, string>> = {
     closeReciter: "إغلاق قائمة القراء",
     availableReciters: "القراء المتاحون",
     sessionUnavailable: "تعذر تحضير هذه الجلسة. حاول مرة أخرى.",
+    copyPracticeLink: "نسخ رابط المراجعة",
+    shareSession: "مشاركة الجلسة",
+    linkCopied: "تم نسخ رابط المراجعة.",
+    translation: "الترجمة",
+    tafsir: "التفسير",
+    chooseTafsir: "اختر مصدر تفسير لقراءة شرح الآية.",
+    loadingTafsir: "جارٍ تحميل التفسير…",
+    tafsirUnavailable: "تعذر تحميل التفسير.",
+    adaptiveReview: "مراجعة تكيفية",
+    ayahRepeatStatus: "تكرار الآية {current} / {total}",
+    hiddenAyah: "الآية مخفية — استمع وردد من حفظك",
   },
 };
 
-let currentLanguage: Language = localStorage.getItem("quran-memo-language") === "ar"
+const linkedLanguage = new URLSearchParams(window.location.search).get("lang");
+let currentLanguage: Language = linkedLanguage === "ar" || linkedLanguage === "en"
+  ? linkedLanguage
+  : localStorage.getItem("quran-memo-language") === "ar"
   || (!localStorage.getItem("quran-memo-language") && navigator.language.startsWith("ar"))
   ? "ar"
   : "en";
@@ -195,9 +249,13 @@ const reciterMenu = element<HTMLElement>("reciter-menu");
 const reciterSearch = element<HTMLInputElement>("reciter-search");
 const reciterOptions = element<HTMLElement>("reciter-options");
 const repeatInput = element<HTMLInputElement>("repeat-input");
+const ayahRepeatInput = element<HTMLInputElement>("ayah-repeat-input");
 const cyclesSelect = element<HTMLSelectElement>("cycles-select");
 const delayInput = element<HTMLInputElement>("delay-input");
 const delayValue = element<HTMLElement>("delay-value");
+const ayahDelayInput = element<HTMLInputElement>("ayah-delay-input");
+const ayahDelayValue = element<HTMLElement>("ayah-delay-value");
+const memorizationSelect = element<HTMLSelectElement>("memorization-select");
 const searchInput = element<HTMLInputElement>("surah-search");
 const surahList = element<HTMLElement>("surah-list");
 const selectedCount = element<HTMLElement>("selected-count");
@@ -206,6 +264,7 @@ const startButton = element<HTMLButtonElement>("start-button");
 const quizButton = element<HTMLButtonElement>("quiz-button");
 const clearButton = element<HTMLButtonElement>("clear-button");
 const selectVisibleButton = element<HTMLButtonElement>("select-visible-button");
+const shareButton = element<HTMLButtonElement>("share-button");
 const catalogLoading = element<HTMLElement>("catalog-loading");
 const audio = element<HTMLAudioElement>("audio-player");
 const playButton = element<HTMLButtonElement>("play-button");
@@ -215,18 +274,117 @@ const quizPanel = element<HTMLElement>("quiz-panel");
 const quizOptions = element<HTMLElement>("quiz-options");
 const quizResult = element<HTMLElement>("quiz-result");
 
+interface CustomSelectController {
+  root: HTMLElement;
+  refresh(): void;
+  close(): void;
+}
+
+const customSelectControllers = new Map<HTMLSelectElement, CustomSelectController>();
+
+function enhanceSelect(select: HTMLSelectElement): CustomSelectController {
+  const root = document.createElement("div");
+  root.className = "custom-select";
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "custom-select-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute("aria-label", select.getAttribute("aria-label") ?? select.id);
+  const value = document.createElement("span");
+  value.className = "custom-select-value";
+  const chevron = document.createElement("i");
+  chevron.className = "custom-select-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+  chevron.textContent = "⌄";
+  trigger.append(value, chevron);
+
+  const menu = document.createElement("div");
+  menu.className = "custom-select-menu";
+  menu.setAttribute("role", "listbox");
+  menu.hidden = true;
+  root.append(trigger, menu);
+  select.after(root);
+  select.hidden = true;
+
+  const close = () => {
+    menu.hidden = true;
+    root.classList.remove("open");
+    trigger.setAttribute("aria-expanded", "false");
+  };
+  const refresh = () => {
+    const selected = select.selectedOptions[0];
+    value.textContent = selected?.textContent?.trim() || "—";
+    menu.replaceChildren();
+    for (const option of select.options) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `custom-select-option${option.selected ? " selected" : ""}`;
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", String(option.selected));
+      const marker = document.createElement("span");
+      marker.className = "custom-select-marker";
+      marker.textContent = option.selected ? "✓" : "";
+      const label = document.createElement("span");
+      label.textContent = option.textContent;
+      button.append(marker, label);
+      button.addEventListener("click", () => {
+        select.value = option.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        refresh();
+        close();
+        trigger.focus();
+      });
+      menu.append(button);
+    }
+  };
+  const open = () => {
+    for (const controller of customSelectControllers.values()) controller.close();
+    closeReciterMenu();
+    refresh();
+    menu.hidden = false;
+    root.classList.add("open");
+    trigger.setAttribute("aria-expanded", "true");
+  };
+
+  trigger.addEventListener("click", () => menu.hidden ? open() : close());
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      open();
+      menu.querySelector<HTMLButtonElement>(".custom-select-option.selected, .custom-select-option")?.focus();
+    }
+  });
+  select.addEventListener("change", refresh);
+  refresh();
+  return { root, refresh, close };
+}
+
+for (const select of [cyclesSelect, memorizationSelect, element<HTMLSelectElement>("tafsir-select")]) {
+  customSelectControllers.set(select, enhanceSelect(select));
+}
+
+function refreshCustomSelect(select: HTMLSelectElement): void {
+  customSelectControllers.get(select)?.refresh();
+}
+
 let chapters: Chapter[] = [];
 let reciters: Reciter[] = [];
+let tafsirs: TafsirResource[] = [];
 let visibleChapters: Chapter[] = [];
 const selectedIds = new Set<number>();
 let session: SessionGroup[] = [];
 let surahIndex = 0;
 let verseIndex = 0;
 let surahRepeat = 1;
+let ayahRepeat = 1;
 let cycle = 1;
 let sessionRepeats = 3;
-let sessionCycles: number | "forever" = "forever";
+let sessionCycles: number | "forever" = 1;
 let delaySeconds = 0;
+let ayahDelaySeconds = 0;
+let ayahRepeats = 1;
+let memorizationLevel: MemorizationLevel = "full";
 let isPlaying = false;
 let delayTimer: number | undefined;
 let mode: "practice" | "quiz" = "practice";
@@ -234,6 +392,20 @@ let quizPool: QuizChoice[] = [];
 let quizCorrect = 0;
 let quizTotal = 0;
 let highlightFrame: number | undefined;
+let transitionScores: TransitionScores = loadTransitionScores();
+let quizReviewQueue: Array<{ surahIndex: number; verseIndex: number }> = [];
+let quizInReview = false;
+let tafsirRequest = 0;
+let lastRenderedVerseKey = "";
+
+function loadTransitionScores(): TransitionScores {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("quran-memo-transition-scores") ?? "{}");
+    return parsed && typeof parsed === "object" ? parsed as TransitionScores : {};
+  } catch {
+    return {};
+  }
+}
 
 function showToast(message: string, error = false): void {
   toast.textContent = message;
@@ -347,10 +519,14 @@ function applyLanguage(language: Language): void {
   element("next-button").setAttribute("aria-label", t("nextAyah"));
   playButton.setAttribute("aria-label", t(isPlaying ? "pause" : "play"));
   delayValue.textContent = language === "ar" ? `${delayInput.value} ث` : `${delayInput.value}s`;
+  ayahDelayValue.textContent = language === "ar" ? `${ayahDelayInput.value} ث` : `${ayahDelayInput.value}s`;
   if (reciters.length) {
     updateReciterTrigger();
     renderReciterOptions();
   }
+  if (tafsirs.length) renderTafsirOptions(true);
+  refreshCustomSelect(cyclesSelect);
+  refreshCustomSelect(memorizationSelect);
   if (chapters.length) {
     renderSurahs();
     renderSelection();
@@ -359,11 +535,105 @@ function applyLanguage(language: Language): void {
   if (activeGroup?.verses[verseIndex]) updatePlayerView();
 }
 
+function renderTafsirOptions(preferLanguage = false): void {
+  const tafsirSelect = element<HTMLSelectElement>("tafsir-select");
+  const selectedId = Number(tafsirSelect.value);
+  const preferredLanguage = currentLanguage === "ar" ? "arabic" : "english";
+  const localized = tafsirs.filter((tafsir) => tafsir.languageName.toLowerCase() === preferredLanguage);
+  const ordered = localized.length ? localized : tafsirs;
+  tafsirSelect.replaceChildren();
+  for (const tafsir of ordered) {
+    const option = document.createElement("option");
+    option.value = String(tafsir.id);
+    option.textContent = currentLanguage === "ar" ? tafsir.nameArabic : tafsir.nameEnglish;
+    tafsirSelect.append(option);
+  }
+  const selected = tafsirs.find((tafsir) => tafsir.id === selectedId);
+  if (!preferLanguage && selected) tafsirSelect.value = String(selected.id);
+  else {
+    const preferred = ordered.find((tafsir) => tafsir.languageName.toLowerCase() === preferredLanguage);
+    if (preferred) tafsirSelect.value = String(preferred.id);
+  }
+  const active = tafsirs.find((tafsir) => tafsir.id === Number(tafsirSelect.value));
+  const arabic = active?.languageName.toLowerCase() === "arabic";
+  element("tafsir-text").setAttribute("dir", arabic ? "rtl" : "ltr");
+  element("tafsir-text").setAttribute("lang", arabic ? "ar" : "en");
+  refreshCustomSelect(tafsirSelect);
+}
+
+function currentSharedPractice() {
+  return {
+    surahIds: [...selectedIds],
+    reciterId: Number(reciterSelect.value) || 6,
+    ayahRepeats: Math.min(100, Math.max(1, Number(ayahRepeatInput.value) || 1)),
+    surahRepeats: Math.min(100, Math.max(1, Number(repeatInput.value) || 3)),
+    cycles: cyclesSelect.value === "forever" ? "forever" as const : Math.max(1, Number(cyclesSelect.value) || 1),
+    ayahDelay: Number(ayahDelayInput.value),
+    surahDelay: Number(delayInput.value),
+    memorization: memorizationSelect.value as MemorizationLevel,
+    language: currentLanguage,
+  };
+}
+
+function practiceUrl(): string {
+  const url = new URL(window.location.href);
+  url.search = encodePracticeLink(currentSharedPractice()).toString();
+  return url.toString();
+}
+
+async function copyPracticeLink(): Promise<void> {
+  const url = practiceUrl();
+  history.replaceState(null, "", url);
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    const input = document.createElement("input");
+    input.value = url;
+    document.body.append(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  }
+  showToast(t("linkCopied"));
+}
+
+function restoreSharedPractice(): void {
+  const shared = decodePracticeLink(new URLSearchParams(window.location.search));
+  if (shared.language) currentLanguage = shared.language;
+  for (const id of shared.surahIds ?? []) selectedIds.add(id);
+  if (shared.reciterId && reciters.some((reciter) => reciter.id === shared.reciterId)) {
+    reciterSelect.value = String(shared.reciterId);
+  }
+  if (shared.ayahRepeats) ayahRepeatInput.value = String(shared.ayahRepeats);
+  if (shared.surahRepeats) repeatInput.value = String(shared.surahRepeats);
+  if (shared.cycles) cyclesSelect.value = String(shared.cycles);
+  if (shared.ayahDelay !== undefined) ayahDelayInput.value = String(shared.ayahDelay);
+  if (shared.surahDelay !== undefined) delayInput.value = String(shared.surahDelay);
+  if (shared.memorization) memorizationSelect.value = shared.memorization;
+  applyLanguage(currentLanguage);
+  renderSelection();
+}
+
 async function loadCatalog(): Promise<void> {
   try {
-    const catalog = await getJson<{ chapters: Chapter[]; reciters: Reciter[]; defaultReciterId: number }>("/api/catalog");
+    const catalog = await getJson<{
+      chapters: Chapter[];
+      reciters: Reciter[];
+      tafsirs: Array<TafsirResource & { name?: string }>;
+      defaultReciterId: number;
+    }>("/api/catalog");
     chapters = catalog.chapters;
     reciters = catalog.reciters;
+    tafsirs = (catalog.tafsirs ?? []).flatMap((tafsir) => {
+      const fallbackName = tafsir.nameEnglish || tafsir.nameArabic || tafsir.name;
+      if (!fallbackName || !Number.isInteger(tafsir.id)) return [];
+      return [{
+        id: tafsir.id,
+        nameEnglish: tafsir.nameEnglish || fallbackName,
+        nameArabic: tafsir.nameArabic || fallbackName,
+        languageName: tafsir.languageName || "unknown",
+      }];
+    });
     for (const reciter of reciters) {
       const option = document.createElement("option");
       option.value = String(reciter.id);
@@ -371,6 +641,7 @@ async function loadCatalog(): Promise<void> {
       option.selected = reciter.id === catalog.defaultReciterId;
       reciterSelect.append(option);
     }
+    restoreSharedPractice();
     updateReciterTrigger();
     renderReciterOptions();
     catalogLoading.hidden = true;
@@ -427,6 +698,7 @@ function renderSelection(): void {
   startButton.disabled = selected.length === 0;
   quizButton.disabled = selected.length === 0;
   clearButton.disabled = selected.length === 0;
+  shareButton.disabled = selected.length === 0;
   selectedChips.replaceChildren();
   for (const chapter of selected.slice(0, 5)) {
     const chip = document.createElement("span");
@@ -457,11 +729,17 @@ function formatTime(seconds: number): string {
 function renderArabicVerse(verse: Verse): void {
   const container = element<HTMLElement>("player-arabic");
   container.replaceChildren();
+  container.classList.toggle("hidden-memory", memorizationLevel === "hidden");
   if (!verse.words?.length) {
-    container.textContent = verse.arabic;
+    container.textContent = memorizationLevel === "hidden" ? t("hiddenAyah") : verse.arabic;
     return;
   }
-  for (const word of verse.words) {
+  const displayed = memorizationWords(verse.words, memorizationLevel);
+  if (displayed.length === 0) {
+    container.textContent = t("hiddenAyah");
+    return;
+  }
+  for (const word of displayed) {
     const span = document.createElement("span");
     span.className = "arabic-word";
     span.dataset.position = String(word.position);
@@ -488,12 +766,7 @@ function syncTimeline(): void {
 }
 
 function animatePlayback(): void {
-  window.cancelAnimationFrame(highlightFrame ?? 0);
-  const tick = () => {
-    syncTimeline();
-    if (!audio.paused && !audio.ended) highlightFrame = window.requestAnimationFrame(tick);
-  };
-  tick();
+  syncTimeline();
 }
 
 async function announceSurahName(chapter: Chapter): Promise<void> {
@@ -521,6 +794,8 @@ async function announceSurahName(chapter: Chapter): Promise<void> {
 function updatePlayerView(): void {
   const group = currentGroup();
   const verse = currentVerse();
+  const verseChanged = verse.verseKey !== lastRenderedVerseKey;
+  lastRenderedVerseKey = verse.verseKey;
   element("player-surah-number").textContent = t("surahNumber", { number: group.chapter.id });
   element("player-progress-label").textContent = t("ayahProgress", { current: verseIndex + 1, total: group.verses.length });
   element("player-surah-english").textContent = group.chapter.nameSimple;
@@ -536,7 +811,46 @@ function updatePlayerView(): void {
       : `${reciter.nameEnglish}${reciter.style ? ` — ${localizedStyle(reciter.style)}` : ""}`
     : "";
   element("surah-repeat-status").textContent = `${surahRepeat} / ${sessionRepeats}`;
+  element("ayah-repeat-status").textContent = `${ayahRepeat} / ${ayahRepeats}`;
   element("cycle-status").textContent = `${cycle} / ${sessionCycles === "forever" ? "∞" : sessionCycles}`;
+  if (verseChanged) {
+    const verseContent = element<HTMLElement>("player-verse-content");
+    verseContent.classList.remove("verse-changing");
+    void verseContent.offsetWidth;
+    verseContent.classList.add("verse-changing");
+  }
+  if (!element<HTMLElement>("tafsir-pane").hidden) void loadCurrentTafsir();
+}
+
+async function loadCurrentTafsir(): Promise<void> {
+  const tafsirId = Number(element<HTMLSelectElement>("tafsir-select").value);
+  const verse = session[surahIndex]?.verses[verseIndex];
+  if (!tafsirId || !verse) {
+    element("tafsir-text").textContent = t("chooseTafsir");
+    return;
+  }
+  const requestId = ++tafsirRequest;
+  element("tafsir-text").textContent = t("loadingTafsir");
+  try {
+    const result = await getJson<{ text: string }>(
+      `/api/tafsir?tafsir=${tafsirId}&verse=${encodeURIComponent(verse.verseKey)}`,
+    );
+    if (requestId === tafsirRequest && currentVerse().verseKey === verse.verseKey) {
+      element("tafsir-text").textContent = result.text;
+    }
+  } catch (error) {
+    console.error(error);
+    if (requestId === tafsirRequest) element("tafsir-text").textContent = t("tafsirUnavailable");
+  }
+}
+
+function showStudyTab(tab: "translation" | "tafsir"): void {
+  const translation = tab === "translation";
+  element<HTMLButtonElement>("translation-tab").setAttribute("aria-selected", String(translation));
+  element<HTMLButtonElement>("tafsir-tab").setAttribute("aria-selected", String(!translation));
+  element<HTMLElement>("translation-pane").hidden = !translation;
+  element<HTMLElement>("tafsir-pane").hidden = translation;
+  if (!translation) void loadCurrentTafsir();
 }
 
 async function playCurrent(announce = false): Promise<void> {
@@ -581,9 +895,17 @@ function sessionComplete(): void {
 }
 
 function advance(): void {
+  if (ayahRepeat < ayahRepeats) {
+    ayahRepeat += 1;
+    element("ayah-repeat-status").textContent = `${ayahRepeat} / ${ayahRepeats}`;
+    playbackMessage.textContent = t("ayahRepeatStatus", { current: ayahRepeat, total: ayahRepeats });
+    delayTimer = window.setTimeout(() => void playCurrent(), ayahDelaySeconds * 1_000);
+    return;
+  }
+  ayahRepeat = 1;
   verseIndex += 1;
   if (verseIndex < currentGroup().verses.length) {
-    void playCurrent();
+    delayTimer = window.setTimeout(() => void playCurrent(), ayahDelaySeconds * 1_000);
     return;
   }
 
@@ -625,11 +947,37 @@ function previous(): void {
     verseIndex = currentGroup().verses.length - 1;
     surahRepeat = 1;
   }
+  ayahRepeat = 1;
   void playCurrent();
 }
 
 function updateQuizScore(): void {
   element("quiz-live-score").textContent = `${quizCorrect} / ${quizTotal}`;
+}
+
+function allSessionTransitions(): Array<{ key: string; surahIndex: number; verseIndex: number }> {
+  return session.flatMap((group, groupIndex) => group.verses.slice(0, -1).map((verse, index) => ({
+    key: transitionKey(verse.verseKey, group.verses[index + 1]!.verseKey),
+    surahIndex: groupIndex,
+    verseIndex: index,
+  })));
+}
+
+function prepareAdaptiveReview(): void {
+  quizReviewQueue = weakestTransitions(allSessionTransitions(), transitionScores)
+    .map(({ surahIndex: groupIndex, verseIndex: index }) => ({ surahIndex: groupIndex, verseIndex: index }));
+  quizInReview = false;
+}
+
+function playNextAdaptiveReview(): boolean {
+  const next = quizReviewQueue.shift();
+  if (!next) return false;
+  quizInReview = true;
+  surahIndex = next.surahIndex;
+  verseIndex = next.verseIndex;
+  playbackMessage.textContent = t("adaptiveReview");
+  void playCurrent();
+  return true;
 }
 
 function showQuizQuestion(): void {
@@ -652,6 +1000,14 @@ function showQuizQuestion(): void {
     button.textContent = choice.arabic;
     button.addEventListener("click", () => {
       const correct = choice.verseKey === correctVerse.verseKey;
+      const key = transitionKey(currentVerse().verseKey, correctVerse.verseKey);
+      transitionScores = recordTransition(transitionScores, key, correct);
+      localStorage.setItem("quran-memo-transition-scores", JSON.stringify(transitionScores));
+      if (!correct && !quizInReview && !quizReviewQueue.some((item) =>
+        item.surahIndex === surahIndex && item.verseIndex === verseIndex
+      )) {
+        quizReviewQueue.push({ surahIndex, verseIndex });
+      }
       quizTotal += 1;
       if (correct) quizCorrect += 1;
       updateQuizScore();
@@ -666,8 +1022,12 @@ function showQuizQuestion(): void {
         : t("correctAnswer", { key: correctVerse.verseKey });
       window.setTimeout(() => {
         quizPanel.hidden = true;
-        verseIndex += 1;
-        void playCurrent();
+        if (quizInReview) {
+          if (!playNextAdaptiveReview()) finishQuiz();
+        } else {
+          verseIndex += 1;
+          void playCurrent();
+        }
       }, 1_050);
     });
     quizOptions.append(button);
@@ -687,6 +1047,10 @@ function finishQuiz(): void {
 }
 
 function handleQuizAudioEnded(): void {
+  if (quizInReview) {
+    showQuizQuestion();
+    return;
+  }
   const step = quizStepAfterAudio(
     surahIndex,
     verseIndex,
@@ -702,7 +1066,7 @@ function handleQuizAudioEnded(): void {
     verseIndex = step.verseIndex;
     void playCurrent(true);
   } else {
-    finishQuiz();
+    if (!playNextAdaptiveReview()) finishQuiz();
   }
 }
 
@@ -711,6 +1075,7 @@ function restartQuiz(): void {
   quizTotal = 0;
   surahIndex = 0;
   verseIndex = 0;
+  prepareAdaptiveReview();
   updateQuizScore();
   quizResult.hidden = true;
   void playCurrent(true);
@@ -720,9 +1085,12 @@ async function startSession(selectedMode: "practice" | "quiz"): Promise<void> {
   const selected = chapters.filter((chapter) => selectedIds.has(chapter.id));
   if (selected.length === 0) return;
   mode = selectedMode;
-  sessionRepeats = Math.max(1, Number(repeatInput.value) || 3);
+  sessionRepeats = Math.min(100, Math.max(1, Number(repeatInput.value) || 3));
+  ayahRepeats = Math.min(100, Math.max(1, Number(ayahRepeatInput.value) || 1));
   sessionCycles = cyclesSelect.value === "forever" ? "forever" : Number(cyclesSelect.value);
   delaySeconds = Number(delayInput.value);
+  ayahDelaySeconds = Number(ayahDelayInput.value);
+  memorizationLevel = memorizationSelect.value as MemorizationLevel;
   startButton.disabled = true;
   quizButton.disabled = true;
   const activeButton = mode === "quiz" ? quizButton : startButton;
@@ -744,9 +1112,11 @@ async function startSession(selectedMode: "practice" | "quiz"): Promise<void> {
     surahIndex = 0;
     verseIndex = 0;
     surahRepeat = 1;
+    ayahRepeat = 1;
     cycle = 1;
     quizCorrect = 0;
     quizTotal = 0;
+    prepareAdaptiveReview();
     updateQuizScore();
     element("loop-stat").hidden = mode === "quiz";
     element("quiz-score-card").hidden = mode !== "quiz";
@@ -772,15 +1142,24 @@ reciterSearch.addEventListener("input", renderReciterOptions);
 element("reciter-close").addEventListener("click", () => { closeReciterMenu(); reciterTrigger.focus(); });
 document.addEventListener("pointerdown", (event) => {
   if (!reciterMenu.hidden && !reciterPicker.contains(event.target as Node)) closeReciterMenu();
+  for (const controller of customSelectControllers.values()) {
+    if (!controller.root.contains(event.target as Node)) controller.close();
+  }
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !reciterMenu.hidden) {
     closeReciterMenu();
     reciterTrigger.focus();
   }
+  if (event.key === "Escape") {
+    for (const controller of customSelectControllers.values()) controller.close();
+  }
 });
 delayInput.addEventListener("input", () => {
   delayValue.textContent = currentLanguage === "ar" ? `${delayInput.value} ث` : `${delayInput.value}s`;
+});
+ayahDelayInput.addEventListener("input", () => {
+  ayahDelayValue.textContent = currentLanguage === "ar" ? `${ayahDelayInput.value} ث` : `${ayahDelayInput.value}s`;
 });
 clearButton.addEventListener("click", () => { selectedIds.clear(); renderSurahs(); renderSelection(); });
 selectVisibleButton.addEventListener("click", () => {
@@ -791,6 +1170,14 @@ selectVisibleButton.addEventListener("click", () => {
 });
 startButton.addEventListener("click", () => void startSession("practice"));
 quizButton.addEventListener("click", () => void startSession("quiz"));
+shareButton.addEventListener("click", () => void copyPracticeLink());
+element("player-share-button").addEventListener("click", () => void copyPracticeLink());
+element("translation-tab").addEventListener("click", () => showStudyTab("translation"));
+element("tafsir-tab").addEventListener("click", () => showStudyTab("tafsir"));
+element("tafsir-select").addEventListener("change", () => {
+  renderTafsirOptions(false);
+  void loadCurrentTafsir();
+});
 element("retry-quiz-button").addEventListener("click", restartQuiz);
 element("back-button").addEventListener("click", () => {
   window.clearTimeout(delayTimer);
@@ -832,3 +1219,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-languag
 
 applyLanguage(currentLanguage);
 void loadCatalog();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js").catch(console.error));
+}

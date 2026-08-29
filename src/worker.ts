@@ -4,6 +4,8 @@ import { parseSurahSpec } from "./surah-spec.ts";
 const CATALOG_TTL_SECONDS = 24 * 60 * 60;
 const SESSION_TTL_SECONDS = 5 * 60;
 const AUDIO_TTL_SECONDS = 365 * 24 * 60 * 60;
+const CATALOG_CACHE_VERSION = "3";
+const TAFSIR_CACHE_VERSION = "2";
 
 interface WorkerContext {
   waitUntil(promise: Promise<unknown>): void;
@@ -36,6 +38,12 @@ function positiveQuery(value: string | null, label: string): number {
 
 function defaultEdgeCache(): Cache {
   return (caches as unknown as { default: Cache }).default;
+}
+
+function versionedCacheRequest(request: Request, version: string): Request {
+  const url = new URL(request.url);
+  url.searchParams.set("__quran_memo_cache", version);
+  return new Request(url, request);
 }
 
 async function cachedJson(
@@ -112,9 +120,11 @@ async function handleApi(
   const api = new QuranClient(fetchFn);
 
   if (url.pathname === "/api/catalog") {
-    return cachedJson(cache, request, context, CATALOG_TTL_SECONDS, async () => {
-      const [chapters, reciters] = await Promise.all([api.chapters(), api.reciters()]);
-      return json({ chapters, reciters, defaultReciterId: DEFAULT_RECITER_ID });
+    return cachedJson(cache, versionedCacheRequest(request, CATALOG_CACHE_VERSION), context, CATALOG_TTL_SECONDS, async () => {
+      const [chapters, reciters, tafsirs] = await Promise.all([
+        api.chapters(), api.reciters(), api.tafsirs().catch(() => []),
+      ]);
+      return json({ chapters, reciters, tafsirs, defaultReciterId: DEFAULT_RECITER_ID });
     });
   }
 
@@ -149,6 +159,13 @@ async function handleApi(
   }
 
   if (url.pathname === "/api/audio") return audioResponse(request, context, cache, fetchFn);
+  if (url.pathname === "/api/tafsir") {
+    return cachedJson(cache, versionedCacheRequest(request, TAFSIR_CACHE_VERSION), context, CATALOG_TTL_SECONDS, async () => {
+      const tafsirId = positiveQuery(url.searchParams.get("tafsir"), "Tafsir");
+      const verseKey = url.searchParams.get("verse") ?? "";
+      return json({ text: await api.tafsirForVerse(tafsirId, verseKey) });
+    });
+  }
   return new Response("Not found", { status: 404 });
 }
 

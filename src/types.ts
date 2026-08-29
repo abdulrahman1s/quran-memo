@@ -12,6 +12,13 @@ export interface Reciter {
   style: string | null;
 }
 
+export interface TafsirResource {
+  id: number;
+  nameEnglish: string;
+  nameArabic: string;
+  languageName: string;
+}
+
 export interface Verse {
   verseKey: string;
   chapterId: number;
@@ -25,8 +32,10 @@ export interface Verse {
 export type SessionCycles = number | "forever";
 
 export interface SessionConfig {
+  ayahRepeats: number;
   surahRepeats: number;
   cycles: SessionCycles;
+  ayahDelaySeconds: number;
   delaySeconds: number;
 }
 

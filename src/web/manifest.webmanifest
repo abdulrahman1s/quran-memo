@@ -1,0 +1,19 @@
+{
+  "name": "Quran Memo",
+  "short_name": "Quran Memo",
+  "description": "Focused Quran listening, repetition, and memorization practice.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1210",
+  "theme_color": "#0d1713",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

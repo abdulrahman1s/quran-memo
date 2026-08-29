@@ -4,7 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0d1713" />
+    <meta name="description" content="A focused Quran memorization player with repetition, quizzes, translation, and Tafsir." />
     <meta name="google" content="notranslate" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>Quran Memo</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -55,22 +58,42 @@
                 </div>
               </label>
 
-              <div class="field-row">
+              <div class="field-row compact-fields">
+                <label class="field">
+                  <span data-i18n="ayahRepeats">Ayah repeats</span>
+                  <input id="ayah-repeat-input" type="number" min="1" max="100" value="1" inputmode="numeric" />
+                </label>
                 <label class="field">
                   <span data-i18n="surahRepeats">Surah repeats</span>
                   <input id="repeat-input" type="number" min="1" max="100" value="3" inputmode="numeric" />
                 </label>
+              </div>
+              <div class="field-row">
                 <label class="field">
                   <span data-i18n="fullCycles">Full cycles</span>
-                  <select id="cycles-select">
-                    <option value="1" data-i18n="oneCycle">1 cycle</option>
+                  <select id="cycles-select" aria-label="Full cycles">
+                    <option value="1" data-i18n="oneCycle" selected>1 cycle</option>
                     <option value="2" data-i18n="twoCycles">2 cycles</option>
                     <option value="3" data-i18n="threeCycles">3 cycles</option>
                     <option value="5" data-i18n="fiveCycles">5 cycles</option>
-                    <option value="forever" data-i18n="forever" selected>Forever</option>
+                    <option value="forever" data-i18n="forever">Forever</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span data-i18n="memorizationMode">Memorization display</span>
+                  <select id="memorization-select" aria-label="Memorization display">
+                    <option value="full" data-i18n="memoryFull">Full ayah</option>
+                    <option value="first-words" data-i18n="memoryFirstWords">First 3 words</option>
+                    <option value="initials" data-i18n="memoryInitials">Word initials</option>
+                    <option value="hidden" data-i18n="memoryHidden">Hidden</option>
                   </select>
                 </label>
               </div>
+
+              <label class="field">
+                <span><i data-i18n="pauseAfterAyah">Pause after each ayah</i> <b id="ayah-delay-value">0s</b></span>
+                <input id="ayah-delay-input" type="range" min="0" max="15" step="1" value="0" />
+              </label>
 
               <label class="field">
                 <span><i data-i18n="pauseBetween">Pause between surah repeats</i> <b id="delay-value">0s</b></span>
@@ -89,6 +112,9 @@
                 </button>
                 <button id="quiz-button" class="quiz-button" type="button" disabled>
                   <span><b data-i18n="testMemory">Test my memory</b><small data-i18n="completeSurah">Complete the surah</small></span><i aria-hidden="true">?</i>
+                </button>
+                <button id="share-button" class="share-button" type="button" disabled>
+                  <span data-i18n="copyPracticeLink">Copy practice link</span><i aria-hidden="true">↗</i>
                 </button>
               </div>
             </aside>
@@ -114,6 +140,7 @@
         <section id="player-view" class="view player-view" hidden>
           <div class="player-topbar">
             <button id="back-button" class="icon-text-button" type="button">← <span data-i18n="changeSession">Change session</span></button>
+            <button id="player-share-button" class="icon-text-button" type="button">↗ <span data-i18n="shareSession">Share session</span></button>
           </div>
 
           <div class="player-layout">
@@ -126,10 +153,20 @@
                 <div><p id="player-surah-english">Al-Fatihah</p><h2 id="player-surah-arabic" translate="no">الفاتحة</h2></div>
                 <span id="player-verse-key" class="verse-key">1:1</span>
               </div>
-              <div class="verse-content">
+              <div id="player-verse-content" class="verse-content">
                 <p id="player-arabic" class="arabic-verse" dir="rtl" translate="no"></p>
                 <div class="ornament" aria-hidden="true"><span></span><i>◆</i><span></span></div>
-                <p id="player-translation" class="translation"></p>
+                <section class="study-panel">
+                  <div class="study-tabs" role="tablist">
+                    <button id="translation-tab" type="button" role="tab" aria-selected="true" data-i18n="translation">Translation</button>
+                    <button id="tafsir-tab" type="button" role="tab" aria-selected="false" data-i18n="tafsir">Tafsir</button>
+                  </div>
+                  <div id="translation-pane" role="tabpanel"><p id="player-translation" class="translation"></p></div>
+                  <div id="tafsir-pane" role="tabpanel" hidden>
+                    <select id="tafsir-select" aria-label="Tafsir source"></select>
+                    <p id="tafsir-text" class="tafsir-text" data-i18n="chooseTafsir">Choose a Tafsir source to read its explanation.</p>
+                  </div>
+                </section>
                 <section id="quiz-panel" class="quiz-panel" hidden>
                   <div class="quiz-question-heading">
                     <span data-i18n="completeSurah">Complete the surah</span>
@@ -153,6 +190,7 @@
               <p id="now-playing-reciter" class="muted"></p>
 
               <div id="loop-stat" class="loop-stat">
+                <div><span data-i18n="ayahRepeats">Ayah repeats</span><b id="ayah-repeat-status">1 / 1</b></div>
                 <div><span data-i18n="surahRepeat">Surah repeat</span><b id="surah-repeat-status">1 / 3</b></div>
                 <div><span data-i18n="selectionCycle">Selection cycle</span><b id="cycle-status">1 / ∞</b></div>
               </div>

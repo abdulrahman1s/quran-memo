@@ -21,17 +21,18 @@ function showProgress(progress: PlaybackProgress, chapterById: Map<number, Chapt
   const cycleTotal = progress.cycles === "forever" ? "∞" : progress.cycles;
   console.log("");
   console.log(color(36, `${chapter?.nameArabic ?? ""} — ${chapter?.nameSimple ?? ""} · ${progress.verse.verseKey}`));
-  console.log(color(90, `Surah ${progress.surahIndex + 1}/${progress.surahCount} · repeat ${progress.surahRepeat}/${progress.surahRepeats} · ayah ${progress.verseIndex + 1}/${progress.verseCount} · session ${progress.cycle}/${cycleTotal}`));
+  console.log(color(90, `Surah ${progress.surahIndex + 1}/${progress.surahCount} · surah repeat ${progress.surahRepeat}/${progress.surahRepeats} · ayah ${progress.verseIndex + 1}/${progress.verseCount} · ayah repeat ${progress.ayahRepeat}/${progress.ayahRepeats} · session ${progress.cycle}/${cycleTotal}`));
   console.log(color(97, progress.verse.arabic));
   console.log(progress.verse.translation);
 }
 
-function showSummary(chapters: Chapter[], reciter: Reciter, surahRepeats: number, cycles: number | "forever", delay: number): void {
+function showSummary(chapters: Chapter[], reciter: Reciter, config: import("./types.ts").SessionConfig): void {
   const names = chapters.map((chapter) => `${chapter.id}. ${chapter.nameArabic} (${chapter.nameSimple})`).join(", ");
   console.log(`\n${color(1, "Quran memorization session")}`);
   console.log(`Reciter: ${reciter.nameArabic} — ${reciter.nameEnglish}${reciter.style ? ` (${reciter.style})` : ""}`);
   console.log(`Surahs:  ${names}`);
-  console.log(`Loop:    each complete surah ×${surahRepeats}; full selection ×${cycles === "forever" ? "∞" : cycles}; delay ${delay}s`);
+  console.log(`Loop:    each ayah ×${config.ayahRepeats}; each complete surah ×${config.surahRepeats}; full selection ×${config.cycles === "forever" ? "∞" : config.cycles}`);
+  console.log(`Pauses:  after ayah ${config.ayahDelaySeconds}s; between surah repeats ${config.delaySeconds}s`);
   console.log(color(90, "Press Ctrl+C to stop."));
 }
 
@@ -75,11 +76,13 @@ async function main(): Promise<void> {
     ? await completeSessionConfig(options)
     : {
         surahRepeats: options.surahRepeats ?? 3,
+        ayahRepeats: options.ayahRepeats ?? 1,
         cycles: options.cycles ?? "forever",
         delaySeconds: options.delaySeconds ?? 0,
+        ayahDelaySeconds: options.ayahDelaySeconds ?? 0,
       };
 
-  showSummary(chapters, reciter, config.surahRepeats, config.cycles, config.delaySeconds);
+  showSummary(chapters, reciter, config);
   console.log(color(90, "\nLoading ayahs and audio URLs…"));
   const chapterVerses = await Promise.all(chapters.map((chapter) => api.versesForChapter(chapter, reciter.id)));
   const player = new MpvPlayer(fetch, [], cache);

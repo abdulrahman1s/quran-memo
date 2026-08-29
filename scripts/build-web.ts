@@ -1,3 +1,5 @@
+import { pwaIcon, pwaManifest, serviceWorkerSource } from "../src/web/pwa-assets.ts";
+
 const result = await Bun.build({
   entrypoints: ["src/web/app.ts"],
   outdir: "dist/web",
@@ -17,6 +19,9 @@ const html = (await Bun.file("src/web/index.html").text())
 await Promise.all([
   Bun.write("dist/web/index.html", html),
   Bun.write("dist/web/styles.css", Bun.file("src/web/styles.css")),
+  Bun.write("dist/web/manifest.webmanifest", pwaManifest),
+  Bun.write("dist/web/icon.svg", pwaIcon),
+  Bun.write("dist/web/sw.js", serviceWorkerSource),
 ]);
 
 console.log("Built Cloudflare static assets in dist/web");

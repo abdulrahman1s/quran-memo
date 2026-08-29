@@ -15,12 +15,17 @@ Mahmoud Khalil Al-Husary — Murattal is the default reciter. Quran text, transl
 - Search and select multiple Surahs in Arabic or English.
 - Play complete Surahs in Quran order.
 - Repeat each complete Surah three times by default before continuing.
-- Configure Surah repetitions, full-selection cycles, and pauses between repeats.
+- Configure Ayah repetitions, Surah repetitions, full-selection cycles, and separate pauses.
 - Choose from Quran.com's available Ayah-by-Ayah reciters.
 - Highlight the currently recited Arabic word using Quran.com timing segments.
 - Announce the Surah name in Arabic before playback begins.
 - Practice with a four-choice “Which Ayah comes next?” audio quiz.
 - Receive an accuracy score after completing a quiz.
+- Revisit weak Ayah transitions automatically through an adaptive quiz history stored on the device.
+- Choose a memorization display: full Ayah, first three words, word initials, or hidden text.
+- Read the translation or load a Quran.com Tafsir for the current Ayah.
+- Copy a practice link that restores the Surahs, reciter, language, repetition rules, and display mode.
+- Install the browser app as a PWA and reuse previously loaded app data offline.
 - Use the responsive interface on mobile and desktop.
 - Switch the interface between English and Arabic with full RTL support.
 - Cache API responses and audio for faster repeat sessions.
@@ -28,7 +33,7 @@ Mahmoud Khalil Al-Husary — Murattal is the default reciter. Quran text, transl
 
 ## How repetition works
 
-Repetition applies to the complete Surah, not to each individual Ayah.
+Ayah and complete-Surah repetition are configured independently. By default, each Ayah plays once, each complete Surah plays three times, and the browser stops after one full-selection cycle. Continuous playback must be selected explicitly.
 
 For example, with Al-Fatihah and Al-Ikhlas selected and the repetition count set to three, playback follows this order:
 
@@ -37,6 +42,8 @@ Al-Fatihah from beginning to end ×3
 Al-Ikhlas from beginning to end ×3
 Then repeat the full selection if another cycle is configured
 ```
+
+Setting Ayah repeats to two changes every pass to `1, 1, 2, 2, 3, 3…`. The Ayah pause applies between those playbacks; the Surah pause applies only before another complete pass of the same Surah.
 
 ## Requirements
 
@@ -66,7 +73,9 @@ Open [http://localhost:3000](http://localhost:3000). To use another port:
 bun run start -- --web --port 4321
 ```
 
-The setup screen lets you select a reciter, choose multiple Surahs, configure repetition, and start either a listening session or a memory quiz.
+The setup screen lets you select a reciter, choose multiple Surahs, configure repetition and memorization cues, and start either a listening session or a memory quiz. Use **Copy practice link** to share the complete setup without forcing audio to autoplay for the recipient.
+
+The app includes a web manifest and service worker. On a supporting browser, use the browser's **Install app** or **Add to Home Screen** action. The interface, previously requested session data, and Tafsir can be reused from browser storage when available. Audio continues to use the browser HTTP cache and the server or Cloudflare audio cache.
 
 Browsers may prevent audio from starting until the page receives a user interaction. If that happens, press the play button once.
 
@@ -95,8 +104,10 @@ Selected Surahs are always normalized into Quran order.
 bun run start -- \
   --surahs 1,36,108-114 \
   --reciter 6 \
+  --ayah-repeat 2 \
   --repeat 3 \
   --cycles forever \
+  --ayah-delay 1 \
   --delay 0
 ```
 
@@ -105,8 +116,10 @@ bun run start -- \
 | `-s, --surahs <list>` | Surah numbers, comma-separated lists, or ranges. |
 | `-r, --reciter <id>` | Quran.com recitation ID. Defaults to Al-Husary Murattal. |
 | `-n, --repeat <count>` | Complete-Surah repetitions. Defaults to `3`. |
+| `--ayah-repeat <count>` | Repetitions for every Ayah. Defaults to `1`. |
 | `-c, --cycles <value>` | Full-selection cycles or `forever`. |
 | `-d, --delay <seconds>` | Pause between repeats of the same Surah. |
+| `--ayah-delay <seconds>` | Pause after each Ayah or Ayah repetition. |
 | `-w, --web` | Start the local browser interface. |
 | `-p, --port <number>` | Browser server port. Defaults to `3000`. |
 | `-h, --help` | Print CLI help. |
@@ -122,7 +135,7 @@ The quiz plays the current Ayah, then presents four Arabic choices for the next 
 3. The quiz continues through every selected Surah.
 4. A final accuracy percentage is shown.
 
-Distractors are unique and may be drawn from outside the selected Surah when the current selection does not contain enough Ayat.
+Distractors are unique and may be drawn from outside the selected Surah when the current selection does not contain enough Ayat. Results for each Ayah-to-Ayah transition are kept in local browser storage. Transitions with more mistakes are replayed as adaptive review questions in later quizzes; no account or server-side learning profile is required.
 
 ## Caching
 
@@ -208,7 +221,11 @@ src/
 ├── worker.ts          Cloudflare Worker API and edge cache
 └── web/
     ├── app.ts         Browser application
+    ├── adaptive.ts    Persistent weak-transition prioritization
     ├── index.html     Interface markup
+    ├── memorization.ts Text-cue display modes
+    ├── practice-link.ts Shareable session serialization
+    ├── pwa-assets.ts  Web manifest, icon, and offline service worker
     ├── styles.css     Responsive English and Arabic styles
     ├── quiz.ts        Quiz choice and scoring logic
     └── timing.ts      Recitation word-highlight synchronization

@@ -39,6 +39,11 @@ describe("Cloudflare Worker", () => {
           })),
         });
       }
+      if (pathname === "/api/v4/resources/tafsirs") {
+        return Response.json({
+          tafsirs: [{ id: 169, name: "Ibn Kathir", language_name: "english" }],
+        });
+      }
       return Response.json({
         recitations: [{
           id: 6,
@@ -50,6 +55,7 @@ describe("Cloudflare Worker", () => {
     const memoryCache = new MemoryCache();
     const worker = createWorker(fetchMock, () => memoryCache as unknown as Cache);
     const request = new Request("https://quran.example/api/catalog");
+    await memoryCache.put(request, Response.json({ chapters: [], legacy: true }));
 
     const firstContext = context();
     const first = await worker.fetch(request, {} as never, firstContext);
@@ -59,7 +65,7 @@ describe("Cloudflare Worker", () => {
 
     const second = await worker.fetch(request, {} as never, context());
     expect(second.status).toBe(200);
-    expect(upstreamCalls).toBe(2);
+    expect(upstreamCalls).toBe(4);
   });
 
   test("rejects an untrusted audio proxy source", async () => {
@@ -71,5 +77,22 @@ describe("Cloudflare Worker", () => {
     );
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Audio source is unavailable." });
+  });
+
+  test("serves and caches a single-Ayah Tafsir", async () => {
+    let calls = 0;
+    const worker = createWorker(async (input) => {
+      calls += 1;
+      expect(new URL(String(input)).pathname).toBe("/api/v4/tafsirs/169/by_ayah/1%3A1");
+      return Response.json({ tafsir: { text: "<p>An explanation.</p>" } });
+    }, () => new MemoryCache() as unknown as Cache);
+    const response = await worker.fetch(
+      new Request("https://quran.example/api/tafsir?tafsir=169&verse=1%3A1"),
+      {} as never,
+      context(),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ text: "An explanation." });
+    expect(calls).toBe(1);
   });
 });

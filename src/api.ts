@@ -1,4 +1,4 @@
-import type { Chapter, Reciter, Verse } from "./types.ts";
+import type { Chapter, Reciter, TafsirResource, Verse } from "./types.ts";
 import { REQUEST_CACHE_TTL_MS, type JsonCache } from "./json-cache.ts";
 
 const API_BASE = "https://api.quran.com/api/v4";
@@ -49,6 +49,19 @@ interface RandomVerseResponse {
   verse?: { verse_key?: string; text_uthmani?: string };
 }
 
+interface TafsirsResponse {
+  tafsirs?: Array<{
+    id?: number;
+    name?: string;
+    language_name?: string;
+    translated_name?: { name?: string };
+  }>;
+}
+
+interface VerseTafsirResponse {
+  tafsir?: { text?: string };
+}
+
 export class QuranApiError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
@@ -60,6 +73,7 @@ export function stripTranslationHtml(input: string): string {
   const withoutTags = input
     .replace(/<sup\b[^>]*>.*?<\/sup>/gis, "")
     .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(p|li|h[1-6]|blockquote)>/gi, "\n")
     .replace(/<[^>]+>/g, "");
 
   return withoutTags
@@ -165,6 +179,40 @@ export class QuranClient {
         style: reciter.style ?? (reciter.id === DEFAULT_RECITER_ID ? "Murattal" : null),
       };
     });
+  }
+
+  async tafsirs(): Promise<TafsirResource[]> {
+    const [english, arabic] = await Promise.all([
+      this.getJson<TafsirsResponse>("/resources/tafsirs?language=en"),
+      this.getJson<TafsirsResponse>("/resources/tafsirs?language=ar"),
+    ]);
+    if (!Array.isArray(english.tafsirs) || english.tafsirs.length === 0) {
+      throw new QuranApiError("Quran.com returned no Tafsir resources.");
+    }
+    const arabicNames = new Map((arabic.tafsirs ?? []).map((tafsir) => [
+      tafsir.id, tafsir.translated_name?.name || tafsir.name,
+    ]));
+    return english.tafsirs.flatMap((tafsir) => {
+      if (typeof tafsir.id !== "number" || typeof tafsir.name !== "string") return [];
+      return [{
+        id: tafsir.id,
+        nameEnglish: tafsir.translated_name?.name || tafsir.name,
+        nameArabic: arabicNames.get(tafsir.id) || tafsir.name,
+        languageName: tafsir.language_name || "unknown",
+      }];
+    });
+  }
+
+  async tafsirForVerse(tafsirId: number, verseKey: string): Promise<string> {
+    if (!Number.isInteger(tafsirId) || tafsirId < 1 || !/^\d{1,3}:\d{1,3}$/.test(verseKey)) {
+      throw new QuranApiError("The requested Tafsir is invalid.");
+    }
+    const data = await this.getJson<VerseTafsirResponse>(
+      `/tafsirs/${tafsirId}/by_ayah/${encodeURIComponent(verseKey)}`,
+    );
+    const text = data.tafsir?.text;
+    if (typeof text !== "string") throw new QuranApiError("Tafsir is unavailable for this Ayah.");
+    return stripTranslationHtml(text);
   }
 
   async randomVerseText(): Promise<{ verseKey: string; arabic: string }> {

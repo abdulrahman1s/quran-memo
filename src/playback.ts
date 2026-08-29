@@ -15,6 +15,8 @@ export interface PlaybackProgress {
   surahCount: number;
   surahRepeat: number;
   surahRepeats: number;
+  ayahRepeat: number;
+  ayahRepeats: number;
   cycle: number;
   cycles: number | "forever";
 }
@@ -133,20 +135,28 @@ export async function playSession(
       const verses = surahs[surahIndex]!;
       for (let surahRepeat = 1; surahRepeat <= config.surahRepeats; surahRepeat += 1) {
         for (let verseIndex = 0; verseIndex < verses.length; verseIndex += 1) {
-          if (signal.aborted) throw signal.reason;
-          const verse = verses[verseIndex]!;
-          onProgress({
-            verse,
-            verseIndex,
-            verseCount: verses.length,
-            surahIndex,
-            surahCount: surahs.length,
-            surahRepeat,
-            surahRepeats: config.surahRepeats,
-            cycle,
-            cycles: config.cycles,
-          });
-          await player.play(verse.audioUrl, signal);
+          for (let ayahRepeat = 1; ayahRepeat <= config.ayahRepeats; ayahRepeat += 1) {
+            if (signal.aborted) throw signal.reason;
+            const verse = verses[verseIndex]!;
+            onProgress({
+              verse,
+              verseIndex,
+              verseCount: verses.length,
+              surahIndex,
+              surahCount: surahs.length,
+              surahRepeat,
+              surahRepeats: config.surahRepeats,
+              ayahRepeat,
+              ayahRepeats: config.ayahRepeats,
+              cycle,
+              cycles: config.cycles,
+            });
+            await player.play(verse.audioUrl, signal);
+            const anotherAyahPlayback = ayahRepeat < config.ayahRepeats || verseIndex + 1 < verses.length;
+            if (config.ayahDelaySeconds > 0 && anotherAyahPlayback) {
+              await waitForDelay(config.ayahDelaySeconds * 1_000, sleep, signal);
+            }
+          }
         }
         if (config.delaySeconds > 0 && surahRepeat < config.surahRepeats) {
           await waitForDelay(config.delaySeconds * 1_000, sleep, signal);

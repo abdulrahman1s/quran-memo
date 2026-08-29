@@ -24,7 +24,7 @@ describe("playSession", () => {
     const progress: PlaybackProgress[] = [];
     await playSession(
       [verses, secondSurah],
-      { surahRepeats: 2, cycles: 2, delaySeconds: 0 },
+      { ayahRepeats: 1, surahRepeats: 2, cycles: 2, ayahDelaySeconds: 0, delaySeconds: 0 },
       player,
       (item) => progress.push(item),
       new AbortController().signal,
@@ -41,7 +41,7 @@ describe("playSession", () => {
     const sleeps: number[] = [];
     await playSession(
       [verses, secondSurah],
-      { surahRepeats: 3, cycles: 1, delaySeconds: 1.25 },
+      { ayahRepeats: 1, surahRepeats: 3, cycles: 1, ayahDelaySeconds: 0, delaySeconds: 1.25 },
       new FakePlayer(),
       () => {},
       new AbortController().signal,
@@ -57,12 +57,27 @@ describe("playSession", () => {
     };
     await expect(playSession(
       [verses],
-      { surahRepeats: 2, cycles: 1, delaySeconds: 0 },
+      { ayahRepeats: 1, surahRepeats: 2, cycles: 1, ayahDelaySeconds: 0, delaySeconds: 0 },
       player,
       () => {},
       controller.signal,
     )).rejects.toThrow("cancelled");
   });
+});
+
+test("playSession repeats individual ayahs and pauses between them", async () => {
+  const player = new FakePlayer();
+  const sleeps: number[] = [];
+  await playSession(
+    [verses],
+    { ayahRepeats: 2, surahRepeats: 1, cycles: 1, ayahDelaySeconds: 0.25, delaySeconds: 0 },
+    player,
+    () => {},
+    new AbortController().signal,
+    async (milliseconds) => { sleeps.push(milliseconds); },
+  );
+  expect(player.calls).toEqual(["https://audio/1", "https://audio/1", "https://audio/2", "https://audio/2"]);
+  expect(sleeps).toEqual([250, 250, 250]);
 });
 
 test("MpvPlayer reports an audio HTTP failure before spawning playback", async () => {

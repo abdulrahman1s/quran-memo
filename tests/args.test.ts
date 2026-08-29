@@ -19,8 +19,10 @@ describe("CLI arguments", () => {
       "--surahs", "1,108-109",
       "--reciter", "7",
       "--repeat", "3",
+      "--ayah-repeat", "2",
       "--cycles", "2",
       "--delay", "1.5",
+      "--ayah-delay", "0.5",
     ])).toEqual({
       help: false,
       web: false,
@@ -28,8 +30,10 @@ describe("CLI arguments", () => {
       surahIds: [1, 108, 109],
       reciterId: 7,
       surahRepeats: 3,
+      ayahRepeats: 2,
       cycles: 2,
       delaySeconds: 1.5,
+      ayahDelaySeconds: 0.5,
     });
   });
 
@@ -47,6 +51,7 @@ describe("CLI arguments", () => {
   test("validates numerical settings", () => {
     expect(() => parseCliArgs(["--repeat", "0"])).toThrow("positive integer");
     expect(() => parseCliArgs(["--delay=-1"])).toThrow("non-negative");
+    expect(() => parseCliArgs(["--ayah-repeat", "0"])).toThrow("positive integer");
     expect(() => parseCycles("sometimes")).toThrow("positive integer");
   });
 });
