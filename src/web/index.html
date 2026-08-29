@@ -23,6 +23,7 @@
         <nav class="main-tabs" aria-label="Main navigation">
           <button id="practice-tab-button" type="button" aria-current="page"><span aria-hidden="true">▶</span><i data-i18n="practiceTab">Practice</i></button>
           <button id="downloads-tab-button" type="button"><span aria-hidden="true">↓</span><i data-i18n="downloadsTab">Downloads</i></button>
+          <button id="settings-tab-button" type="button"><span aria-hidden="true">⚙</span><i data-i18n="settingsTab">Settings</i></button>
         </nav>
         <div class="header-actions">
           <div class="language-switch" role="group" aria-label="Language">
@@ -201,6 +202,52 @@
               <div id="offline-surah-list" class="surah-list offline-surah-list" aria-label="Offline Surah selection"></div>
             </section>
           </div>
+        </section>
+
+        <section id="preferences-view" class="view preferences-view" hidden>
+          <div class="preferences-hero">
+            <p class="eyebrow" data-i18n="readingPreferences">Reading preferences</p>
+            <h1 data-i18n="settingsTitle">Make every session feel right.</h1>
+            <p data-i18n="settingsDescription">Adjust the reading display and recitation pace. Your choices stay on this device.</p>
+          </div>
+
+          <section class="preferences-panel panel">
+            <div class="panel-heading">
+              <span>01</span>
+              <div><h2 data-i18n="displayAndAudio">Display &amp; audio</h2><p data-i18n="displayAndAudioDescription">Changes are saved automatically.</p></div>
+            </div>
+
+            <div class="preference-list">
+              <label class="preference-control" for="ayah-font-size-input">
+                <span class="preference-icon" aria-hidden="true">آ</span>
+                <span class="preference-copy"><b data-i18n="ayahTextSize">Ayah text size</b><small data-i18n="ayahTextSizeDescription">Scale the Arabic ayah while keeping it responsive.</small></span>
+                <output id="ayah-font-size-value" for="ayah-font-size-input">100%</output>
+                <input id="ayah-font-size-input" type="range" min="75" max="150" step="5" value="100" />
+              </label>
+
+              <div class="preference-preview ayah-preview" dir="rtl" lang="ar" translate="no" aria-hidden="true">إِنَّ مَعَ الْعُسْرِ يُسْرًا</div>
+
+              <label class="preference-control" for="tafsir-font-size-input">
+                <span class="preference-icon" aria-hidden="true">ت</span>
+                <span class="preference-copy"><b data-i18n="tafsirTextSize">Tafsir text size</b><small data-i18n="tafsirTextSizeDescription">Choose a comfortable size for longer explanations.</small></span>
+                <output id="tafsir-font-size-value" for="tafsir-font-size-input">15 px</output>
+                <input id="tafsir-font-size-input" type="range" min="12" max="24" step="1" value="15" />
+              </label>
+
+              <div class="preference-preview tafsir-preview" dir="rtl" lang="ar" aria-hidden="true">إن مع الشدة والضيق فرجًا وتيسيرًا.</div>
+
+              <label class="preference-control" for="playback-speed-input">
+                <span class="preference-icon" aria-hidden="true">▶</span>
+                <span class="preference-copy"><b data-i18n="playbackSpeed">Playback speed</b><small data-i18n="playbackSpeedDescription">Slow down difficult passages or review familiar ones faster.</small></span>
+                <output id="playback-speed-value" for="playback-speed-input">1×</output>
+                <input id="playback-speed-input" type="range" min="50" max="200" step="5" value="100" />
+              </label>
+            </div>
+
+            <button id="reset-preferences-button" class="reset-preferences-button" type="button">
+              <span aria-hidden="true">↺</span><span data-i18n="resetPreferences">Restore defaults</span>
+            </button>
+          </section>
         </section>
 
         <section id="player-view" class="view player-view" hidden>

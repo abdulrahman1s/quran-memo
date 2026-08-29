@@ -150,6 +150,20 @@ const messages: Record<Language, Record<string, string>> = {
     partialOfflineDownload: "Some offline audio is cached — retry or remove it",
     practiceTab: "Practice",
     downloadsTab: "Downloads",
+    settingsTab: "Settings",
+    readingPreferences: "Reading preferences",
+    settingsTitle: "Make every session feel right.",
+    settingsDescription: "Adjust the reading display and recitation pace. Your choices stay on this device.",
+    displayAndAudio: "Display & audio",
+    displayAndAudioDescription: "Changes are saved automatically.",
+    ayahTextSize: "Ayah text size",
+    ayahTextSizeDescription: "Scale the Arabic ayah while keeping it responsive.",
+    tafsirTextSize: "Tafsir text size",
+    tafsirTextSizeDescription: "Choose a comfortable size for longer explanations.",
+    playbackSpeed: "Playback speed",
+    playbackSpeedDescription: "Slow down difficult passages or review familiar ones faster.",
+    resetPreferences: "Restore defaults",
+    preferencesReset: "Reading preferences restored.",
     downloadsTitle: "Take your recitation anywhere.",
     downloadsDescription: "Choose a reciter and download complete surahs for listening without a connection.",
     downloadSettings: "Download settings",
@@ -261,6 +275,20 @@ const messages: Record<Language, Record<string, string>> = {
     partialOfflineDownload: "تم حفظ جزء من الصوت — أعد المحاولة أو احذفه",
     practiceTab: "المراجعة",
     downloadsTab: "التحميلات",
+    settingsTab: "الإعدادات",
+    readingPreferences: "تفضيلات القراءة",
+    settingsTitle: "اجعل كل جلسة كما تحب.",
+    settingsDescription: "اضبط عرض النص وسرعة التلاوة. تُحفظ اختياراتك على هذا الجهاز.",
+    displayAndAudio: "العرض والصوت",
+    displayAndAudioDescription: "تُحفظ التغييرات تلقائيًا.",
+    ayahTextSize: "حجم نص الآية",
+    ayahTextSizeDescription: "كبّر أو صغّر نص الآية العربية مع الحفاظ على تناسقه.",
+    tafsirTextSize: "حجم نص التفسير",
+    tafsirTextSizeDescription: "اختر حجمًا مريحًا لقراءة الشروح الطويلة.",
+    playbackSpeed: "سرعة التلاوة",
+    playbackSpeedDescription: "أبطئ المواضع الصعبة أو راجع المواضع المألوفة بسرعة أكبر.",
+    resetPreferences: "استعادة الإعدادات الافتراضية",
+    preferencesReset: "تمت استعادة تفضيلات القراءة.",
     downloadsTitle: "خذ تلاوتك معك أينما كنت.",
     downloadsDescription: "اختر القارئ وحمّل سورًا كاملة للاستماع دون اتصال بالإنترنت.",
     downloadSettings: "إعدادات التحميل",
@@ -290,6 +318,7 @@ function t(key: string, values: Record<string, string | number> = {}): string {
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const setupView = element<HTMLElement>("setup-view");
 const downloadsView = element<HTMLElement>("downloads-view");
+const preferencesView = element<HTMLElement>("preferences-view");
 const playerView = element<HTMLElement>("player-view");
 const reciterSelect = element<HTMLSelectElement>("reciter-select");
 const reciterPicker = element<HTMLElement>("reciter-picker");
@@ -336,11 +365,69 @@ const offlineClearButton = element<HTMLButtonElement>("offline-clear-button");
 const offlineSelectVisibleButton = element<HTMLButtonElement>("offline-select-visible-button");
 const downloadSizeValue = element<HTMLElement>("download-size-value");
 const cacheSizeValue = element<HTMLElement>("cache-size-value");
+const ayahFontSizeInput = element<HTMLInputElement>("ayah-font-size-input");
+const tafsirFontSizeInput = element<HTMLInputElement>("tafsir-font-size-input");
+const playbackSpeedInput = element<HTMLInputElement>("playback-speed-input");
+const ayahFontSizeValue = element<HTMLOutputElement>("ayah-font-size-value");
+const tafsirFontSizeValue = element<HTMLOutputElement>("tafsir-font-size-value");
+const playbackSpeedValue = element<HTMLOutputElement>("playback-speed-value");
 
 const OFFLINE_AUDIO_CACHE = "quran-memo-offline-audio-v1";
 const OFFLINE_MANIFEST_KEY = "quran-memo-offline-downloads-v1";
 const OFFLINE_PRESENT_KEY = "quran-memo-offline-cache-present";
 const OFFLINE_CACHE_BYTES_KEY = "quran-memo-offline-cache-bytes";
+const READER_PREFERENCES_KEY = "quran-memo-reader-preferences-v1";
+
+interface ReaderPreferences {
+  ayahScale: number;
+  tafsirFontSize: number;
+  playbackSpeed: number;
+}
+
+const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
+  ayahScale: 100,
+  tafsirFontSize: 15,
+  playbackSpeed: 100,
+};
+
+function boundedNumber(value: unknown, minimum: number, maximum: number, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(maximum, Math.max(minimum, number)) : fallback;
+}
+
+function loadReaderPreferences(): ReaderPreferences {
+  try {
+    const stored = JSON.parse(localStorage.getItem(READER_PREFERENCES_KEY) ?? "{}") as Partial<ReaderPreferences>;
+    return {
+      ayahScale: boundedNumber(stored.ayahScale, 75, 150, DEFAULT_READER_PREFERENCES.ayahScale),
+      tafsirFontSize: boundedNumber(stored.tafsirFontSize, 12, 24, DEFAULT_READER_PREFERENCES.tafsirFontSize),
+      playbackSpeed: boundedNumber(stored.playbackSpeed, 50, 200, DEFAULT_READER_PREFERENCES.playbackSpeed),
+    };
+  } catch {
+    return { ...DEFAULT_READER_PREFERENCES };
+  }
+}
+
+let readerPreferences = loadReaderPreferences();
+
+function applyReaderPreferences(save = false): void {
+  ayahFontSizeInput.value = String(readerPreferences.ayahScale);
+  tafsirFontSizeInput.value = String(readerPreferences.tafsirFontSize);
+  playbackSpeedInput.value = String(readerPreferences.playbackSpeed);
+  ayahFontSizeValue.value = `${readerPreferences.ayahScale}%`;
+  tafsirFontSizeValue.value = `${readerPreferences.tafsirFontSize} px`;
+  playbackSpeedValue.value = `${Number((readerPreferences.playbackSpeed / 100).toFixed(2))}×`;
+
+  const scale = readerPreferences.ayahScale / 100;
+  document.documentElement.style.setProperty(
+    "--ayah-font-size",
+    `clamp(${32 * scale}px, ${4.2 * scale}vw, ${58 * scale}px)`,
+  );
+  document.documentElement.style.setProperty("--tafsir-font-size", `${readerPreferences.tafsirFontSize}px`);
+  audio.defaultPlaybackRate = readerPreferences.playbackSpeed / 100;
+  audio.playbackRate = readerPreferences.playbackSpeed / 100;
+  if (save) localStorage.setItem(READER_PREFERENCES_KEY, JSON.stringify(readerPreferences));
+}
 
 interface OfflineDownload {
   chapterId: number;
@@ -936,13 +1023,18 @@ function stopPlaybackForNavigation(): void {
   isPlaying = false;
 }
 
-function showMainTab(tab: "practice" | "downloads"): void {
+function showMainTab(tab: "practice" | "downloads" | "settings"): void {
   if (!playerView.hidden) stopPlaybackForNavigation();
   setupView.hidden = tab !== "practice";
   downloadsView.hidden = tab !== "downloads";
+  preferencesView.hidden = tab !== "settings";
   playerView.hidden = true;
-  element<HTMLButtonElement>("practice-tab-button").toggleAttribute("aria-current", tab === "practice");
-  element<HTMLButtonElement>("downloads-tab-button").toggleAttribute("aria-current", tab === "downloads");
+  const practiceTab = element<HTMLButtonElement>("practice-tab-button");
+  const downloadsTab = element<HTMLButtonElement>("downloads-tab-button");
+  const settingsTab = element<HTMLButtonElement>("settings-tab-button");
+  tab === "practice" ? practiceTab.setAttribute("aria-current", "page") : practiceTab.removeAttribute("aria-current");
+  tab === "downloads" ? downloadsTab.setAttribute("aria-current", "page") : downloadsTab.removeAttribute("aria-current");
+  tab === "settings" ? settingsTab.setAttribute("aria-current", "page") : settingsTab.removeAttribute("aria-current");
   if (tab === "downloads") renderOfflineSurahs();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1541,6 +1633,24 @@ offlineSelectVisibleButton.addEventListener("click", () => {
 });
 element("practice-tab-button").addEventListener("click", () => showMainTab("practice"));
 element("downloads-tab-button").addEventListener("click", () => showMainTab("downloads"));
+element("settings-tab-button").addEventListener("click", () => showMainTab("settings"));
+ayahFontSizeInput.addEventListener("input", () => {
+  readerPreferences.ayahScale = boundedNumber(ayahFontSizeInput.value, 75, 150, 100);
+  applyReaderPreferences(true);
+});
+tafsirFontSizeInput.addEventListener("input", () => {
+  readerPreferences.tafsirFontSize = boundedNumber(tafsirFontSizeInput.value, 12, 24, 15);
+  applyReaderPreferences(true);
+});
+playbackSpeedInput.addEventListener("input", () => {
+  readerPreferences.playbackSpeed = boundedNumber(playbackSpeedInput.value, 50, 200, 100);
+  applyReaderPreferences(true);
+});
+element("reset-preferences-button").addEventListener("click", () => {
+  readerPreferences = { ...DEFAULT_READER_PREFERENCES };
+  applyReaderPreferences(true);
+  showToast(t("preferencesReset"));
+});
 startButton.addEventListener("click", () => void startSession("practice"));
 quizButton.addEventListener("click", () => void startSession("quiz"));
 downloadButton.addEventListener("click", () => void downloadSelectedSurahs());
@@ -1581,6 +1691,8 @@ audio.addEventListener("playing", () => {
 });
 audio.addEventListener("timeupdate", syncTimeline);
 audio.addEventListener("pause", () => window.cancelAnimationFrame(highlightFrame ?? 0));
+
+applyReaderPreferences();
 
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-language]")) {
   button.addEventListener("click", () => applyLanguage(button.dataset.language as Language));

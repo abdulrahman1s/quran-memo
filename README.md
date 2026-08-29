@@ -24,6 +24,7 @@ Mahmoud Khalil Al-Husary — Murattal is the default reciter. Quran text, transl
 - Revisit weak Ayah transitions automatically through an adaptive quiz history stored on the device.
 - Choose a memorization display: full Ayah, first three words, word initials, or hidden text.
 - Read the translation or load a Quran.com Tafsir for the current Ayah.
+- Use the Settings tab to adjust Ayah text scale, Tafsir text size, and playback speed; preferences persist on the device.
 - Copy a practice link that restores the Surahs, reciter, language, repetition rules, and display mode.
 - Install the browser app as a PWA and reuse previously loaded app data offline.
 - Manually download selected Surahs for reliable offline audio, with progress and per-reciter status.

@@ -122,6 +122,25 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 .downloads-hero { max-width: 760px; margin-bottom: 42px; }
 .downloads-hero h1 { margin: 0; font: 500 clamp(40px, 5.5vw, 72px)/1 Georgia, serif; letter-spacing: -.045em; }
 .downloads-hero > p:last-child { max-width: 610px; margin: 20px 0 0; color: var(--muted); font-size: 16px; line-height: 1.7; }
+.preferences-view { width: min(900px, 100%); margin: 0 auto; }
+.preferences-hero { max-width: 720px; margin-bottom: 42px; }
+.preferences-hero h1 { margin: 0; font: 500 clamp(40px, 5.5vw, 72px)/1 Georgia, serif; letter-spacing: -.045em; }
+.preferences-hero > p:last-child { max-width: 610px; margin: 20px 0 0; color: var(--muted); font-size: 16px; line-height: 1.7; }
+.preferences-panel { padding: 34px; }
+.preference-list { display: grid; gap: 12px; }
+.preference-control { display: grid; grid-template-columns: 44px minmax(0,1fr) auto; align-items: center; gap: 14px; padding: 17px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.025); }
+.preference-control input[type="range"] { grid-column: 2 / -1; }
+.preference-icon { width: 42px; height: 42px; grid-row: 1 / span 2; display: grid; place-items: center; border-radius: 12px; color: var(--gold); background: rgba(216,184,114,.085); font: 600 19px/1 "Noto Naskh Arabic", serif; }
+.preference-copy { min-width: 0; }
+.preference-copy b, .preference-copy small { display: block; }
+.preference-copy b { font-size: 13px; }
+.preference-copy small { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.preference-control output { min-width: 56px; padding: 6px 9px; border: 1px solid rgba(216,184,114,.2); border-radius: 999px; color: var(--gold-bright); background: rgba(216,184,114,.055); text-align: center; font: 700 10px/1 monospace; }
+.preference-preview { padding: 18px 22px; border: 1px dashed rgba(216,184,114,.2); border-radius: 15px; color: #e9e8df; background: rgba(5,10,8,.18); text-align: center; }
+.ayah-preview { font: 500 var(--ayah-font-size, clamp(32px, 4.2vw, 58px))/1.8 "Noto Naskh Arabic", "Traditional Arabic", serif; }
+.tafsir-preview { font: 400 var(--tafsir-font-size, 15px)/1.9 "Noto Naskh Arabic", "Traditional Arabic", serif; color: #bbc6bf; }
+.reset-preferences-button { margin: 24px auto 0; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); border-radius: 12px; padding: 11px 15px; color: var(--muted); background: rgba(255,255,255,.025); cursor: pointer; font-size: 11px; }
+.reset-preferences-button:hover { color: var(--text); background: rgba(255,255,255,.055); }
 .downloads-layout { display: grid; grid-template-columns: minmax(290px, .62fr) minmax(500px, 1.38fr); gap: 22px; align-items: start; }
 .download-manager, .offline-surah-panel { padding: 30px; }
 .download-manager { position: sticky; top: 24px; }
@@ -203,7 +222,7 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 .verse-changing > .study-panel { animation: verse-change .42s cubic-bezier(.22,.75,.25,1) both; }
 .verse-changing > .ornament { animation-delay: .035s; }
 .verse-changing > .study-panel { animation-delay: .07s; }
-.arabic-verse { font: 500 clamp(32px, 4.2vw, 58px)/2 "Noto Naskh Arabic", "Traditional Arabic", serif; margin: 0; color: #f7f3e9; text-wrap: balance; }
+.arabic-verse { font: 500 var(--ayah-font-size, clamp(32px, 4.2vw, 58px))/2 "Noto Naskh Arabic", "Traditional Arabic", serif; margin: 0; color: #f7f3e9; text-wrap: balance; }
 .arabic-verse.hidden-memory { color: var(--muted); font: 500 clamp(16px, 2vw, 22px)/1.6 Georgia, serif; }
 .translation { max-width: 720px; margin: 0 auto; color: #bbc6bf; font: 400 clamp(16px, 1.6vw, 21px)/1.75 Georgia, serif; text-wrap: balance; }
 .arabic-word { display: inline-block; padding: 0 .08em; border-radius: .18em; transition: color .12s, background .12s, text-shadow .12s; }
@@ -219,7 +238,7 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 #tafsir-select + .custom-select { width: min(500px, 100%); margin: 0 auto; }
 #tafsir-select + .custom-select .custom-select-menu { max-height: 310px; }
 #tafsir-select + .custom-select .custom-select-value { font-size: 12px; }
-.tafsir-text { max-height: 250px; overflow: auto; margin: 0; padding: 0 10px; color: #bbc6bf; font-size: 15px; line-height: 1.9; text-align: start; white-space: pre-line; scrollbar-color: rgba(216,184,114,.25) transparent; }
+.tafsir-text { max-height: 250px; overflow: auto; margin: 0; padding: 0 10px; color: #bbc6bf; font-size: var(--tafsir-font-size, 15px); line-height: 1.9; text-align: start; white-space: pre-line; scrollbar-color: rgba(216,184,114,.25) transparent; }
 .now-playing { padding: 30px; align-self: start; display: flex; flex-direction: column; min-height: 0; }
 .now-playing h2 { font: 500 31px/1.15 Georgia, serif; margin: 0 0 8px; }
 .muted { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0; }
@@ -266,6 +285,7 @@ footer { min-height: 90px; border-top: 1px solid var(--line); display: flex; jus
 html[dir="rtl"] body { font-family: "Noto Naskh Arabic", Tahoma, Arial, sans-serif; }
 html[dir="rtl"] .brand strong,
 html[dir="rtl"] .hero-copy h1,
+html[dir="rtl"] .preferences-hero h1,
 html[dir="rtl"] .panel-heading h2,
 html[dir="rtl"] .now-playing h2,
 html[dir="rtl"] .quiz-question-heading b,
@@ -316,7 +336,7 @@ html[dir="rtl"] .translation { direction: ltr; }
   .view { padding-top: 46px; }
   .hero-copy { margin-bottom: 35px; }
   .hero-copy h1 { font-size: 49px; }
-  .settings-panel, .surah-panel, .now-playing, .download-manager, .offline-surah-panel { padding: 22px; }
+  .settings-panel, .surah-panel, .now-playing, .download-manager, .offline-surah-panel, .preferences-panel { padding: 22px; }
   .downloads-hero { margin-bottom: 30px; }
   .downloads-hero h1 { font-size: 43px; }
   .surah-list { grid-template-columns: 1fr; }
@@ -330,7 +350,10 @@ html[dir="rtl"] .translation { direction: ltr; }
   .custom-select-menu { position: fixed; z-index: 70; top: auto; left: 12px; right: 12px; bottom: 12px; max-height: min(58vh, 440px); padding: 10px; border-radius: 20px; }
   .custom-select-option { min-height: 48px; padding: 10px; font-size: 13px; }
   .verse-stage { min-height: 530px; padding: 23px 20px; }
-  .arabic-verse { font-size: 34px; line-height: 1.9; }
+  .arabic-verse { line-height: 1.9; }
+  .preferences-hero h1 { font-size: 43px; }
+  .preference-control { grid-template-columns: 38px minmax(0,1fr) auto; padding: 15px 13px; gap: 11px; }
+  .preference-icon { width: 38px; height: 38px; }
   .quiz-options { grid-template-columns: 1fr; }
   .quiz-option { min-height: 72px; font-size: 20px; }
   .quiz-question-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
