@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quran-memo",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-29",
+  "assets": {
+    "directory": "./dist/web",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  }
+}

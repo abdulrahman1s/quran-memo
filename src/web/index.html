@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d1713" />
+    <meta name="google" content="notranslate" />
+    <title>Quran Memo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="app-shell">
+      <header class="site-header">
+        <a class="brand" href="/" aria-label="Quran Memo home">
+          <span class="brand-mark" aria-hidden="true">ق</span>
+          <span><strong data-i18n="brandName">Quran Memo</strong><small data-i18n="brandTagline">Listen. Repeat. Remember.</small></span>
+        </a>
+        <div class="language-switch" role="group" aria-label="Language">
+          <button type="button" data-language="en" aria-pressed="true">EN</button>
+          <button type="button" data-language="ar" aria-pressed="false">العربية</button>
+        </div>
+      </header>
+
+      <main>
+        <section id="setup-view" class="view">
+          <div class="hero-copy">
+            <p class="eyebrow" data-i18n="heroEyebrow">A calmer way to memorize</p>
+            <h1><span data-i18n="heroLineOne">Let every surah</span><br /><em data-i18n="heroLineTwo">settle in.</em></h1>
+            <p data-i18n="heroDescription">Select complete surahs, choose a reciter, and let focused repetition do the rest.</p>
+          </div>
+
+          <div class="setup-grid">
+            <aside class="settings-panel panel">
+              <div class="panel-heading">
+                <span>01</span>
+                <div><h2 data-i18n="practiceSettings">Practice settings</h2><p data-i18n="practiceDescription">Shape your listening session.</p></div>
+              </div>
+
+              <label class="field">
+                <span data-i18n="reciter">Reciter</span>
+                <div id="reciter-picker" class="reciter-picker">
+                  <button id="reciter-trigger" class="reciter-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="reciter-trigger-icon" aria-hidden="true">◉</span>
+                    <span class="reciter-trigger-copy"><b id="reciter-trigger-name" data-i18n="loadingReciters">Loading reciters…</b><small id="reciter-trigger-detail"></small></span>
+                    <span class="reciter-chevron" aria-hidden="true">⌄</span>
+                  </button>
+                  <div id="reciter-menu" class="reciter-menu" hidden>
+                    <div class="reciter-menu-heading"><span data-i18n="chooseReciter">Choose a reciter</span><button id="reciter-close" type="button" aria-label="Close reciter picker">×</button></div>
+                    <label class="reciter-search"><span aria-hidden="true">⌕</span><input id="reciter-search" type="search" placeholder="Search reciters…" data-i18n-placeholder="searchReciters" autocomplete="off" /></label>
+                    <div id="reciter-options" class="reciter-options" role="listbox" aria-label="Available reciters"></div>
+                  </div>
+                  <select id="reciter-select" aria-label="Reciter" hidden></select>
+                </div>
+              </label>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="surahRepeats">Surah repeats</span>
+                  <input id="repeat-input" type="number" min="1" max="100" value="3" inputmode="numeric" />
+                </label>
+                <label class="field">
+                  <span data-i18n="fullCycles">Full cycles</span>
+                  <select id="cycles-select">
+                    <option value="1" data-i18n="oneCycle">1 cycle</option>
+                    <option value="2" data-i18n="twoCycles">2 cycles</option>
+                    <option value="3" data-i18n="threeCycles">3 cycles</option>
+                    <option value="5" data-i18n="fiveCycles">5 cycles</option>
+                    <option value="forever" data-i18n="forever" selected>Forever</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="field">
+                <span><i data-i18n="pauseBetween">Pause between surah repeats</i> <b id="delay-value">0s</b></span>
+                <input id="delay-input" type="range" min="0" max="15" step="1" value="0" />
+              </label>
+
+              <div class="selection-summary">
+                <span><b id="selected-count">0</b> <i data-i18n="surahsSelected">surahs selected</i></span>
+                <button id="clear-button" class="text-button" type="button" data-i18n="clear">Clear</button>
+              </div>
+              <div id="selected-chips" class="selected-chips" aria-live="polite"></div>
+
+              <div class="session-actions">
+                <button id="start-button" class="primary-button" type="button" disabled>
+                  <span data-i18n="beginListening">Begin listening</span><i aria-hidden="true">→</i>
+                </button>
+                <button id="quiz-button" class="quiz-button" type="button" disabled>
+                  <span><b data-i18n="testMemory">Test my memory</b><small data-i18n="completeSurah">Complete the surah</small></span><i aria-hidden="true">?</i>
+                </button>
+              </div>
+            </aside>
+
+            <section class="surah-panel panel">
+              <div class="panel-heading">
+                <span>02</span>
+                <div><h2 data-i18n="chooseSurahs">Choose surahs</h2><p data-i18n="chooseDescription">Pick one or build a longer set.</p></div>
+              </div>
+              <div class="browser-toolbar">
+                <label class="search-box">
+                  <span aria-hidden="true">⌕</span>
+                  <input id="surah-search" type="search" placeholder="Search Arabic, English, or number…" data-i18n-placeholder="searchSurahs" autocomplete="off" />
+                </label>
+                <button id="select-visible-button" class="secondary-button" type="button" data-i18n="selectVisible">Select visible</button>
+              </div>
+              <div id="surah-list" class="surah-list" aria-label="Surah selection"></div>
+              <div id="catalog-loading" class="loading-state"><span></span> <i data-i18n="loadingCatalog">Loading Quran catalog…</i></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="player-view" class="view player-view" hidden>
+          <div class="player-topbar">
+            <button id="back-button" class="icon-text-button" type="button">← <span data-i18n="changeSession">Change session</span></button>
+          </div>
+
+          <div class="player-layout">
+            <section class="verse-stage panel">
+              <div class="verse-meta">
+                <span id="player-surah-number">Surah 1</span>
+                <span id="player-progress-label">Ayah 1 of 7</span>
+              </div>
+              <div class="surah-title-row">
+                <div><p id="player-surah-english">Al-Fatihah</p><h2 id="player-surah-arabic" translate="no">الفاتحة</h2></div>
+                <span id="player-verse-key" class="verse-key">1:1</span>
+              </div>
+              <div class="verse-content">
+                <p id="player-arabic" class="arabic-verse" dir="rtl" translate="no"></p>
+                <div class="ornament" aria-hidden="true"><span></span><i>◆</i><span></span></div>
+                <p id="player-translation" class="translation"></p>
+                <section id="quiz-panel" class="quiz-panel" hidden>
+                  <div class="quiz-question-heading">
+                    <span data-i18n="completeSurah">Complete the surah</span>
+                    <b data-i18n="whichNext">Which ayah comes next?</b>
+                  </div>
+                  <div id="quiz-options" class="quiz-options"></div>
+                </section>
+                <section id="quiz-result" class="quiz-result" hidden>
+                  <span data-i18n="sessionComplete">Session complete</span>
+                  <strong id="quiz-result-percent">100%</strong>
+                  <h3 data-i18n="accuracyTitle">Your memorization accuracy</h3>
+                  <p id="quiz-result-detail">You answered 3 of 3 correctly.</p>
+                  <button id="retry-quiz-button" class="primary-button" type="button"><span data-i18n="retryQuiz">Try this quiz again</span><i>↻</i></button>
+                </section>
+              </div>
+            </section>
+
+            <aside class="now-playing panel">
+              <p class="eyebrow" data-i18n="nowPlaying">Now playing</p>
+              <h2 id="now-playing-title">Al-Fatihah</h2>
+              <p id="now-playing-reciter" class="muted"></p>
+
+              <div id="loop-stat" class="loop-stat">
+                <div><span data-i18n="surahRepeat">Surah repeat</span><b id="surah-repeat-status">1 / 3</b></div>
+                <div><span data-i18n="selectionCycle">Selection cycle</span><b id="cycle-status">1 / ∞</b></div>
+              </div>
+
+              <div id="quiz-score-card" class="quiz-score-card" hidden>
+                <span data-i18n="quizScore">Quiz score</span><b id="quiz-live-score">0 / 0</b>
+              </div>
+
+              <div class="timeline">
+                <div class="timeline-track"><i id="timeline-progress"></i></div>
+                <div><span id="elapsed-time">0:00</span><span id="duration-time">0:00</span></div>
+              </div>
+
+              <div class="transport">
+                <button id="previous-button" type="button" aria-label="Previous ayah">‹</button>
+                <button id="play-button" class="play-button" type="button" aria-label="Pause">Ⅱ</button>
+                <button id="next-button" type="button" aria-label="Next ayah">›</button>
+              </div>
+
+              <p id="playback-message" class="playback-message" data-i18n="preparing">Preparing…</p>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <footer><span data-i18n="contentCredit">Quran content and audio from Quran.com</span><span class="author-credit">Abdulrahman Salah @ <a href="mailto:mail@abdulrahman.dev">mail@abdulrahman.dev</a></span></footer>
+    </div>
+
+    <audio id="audio-player" preload="auto"></audio>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="./app.ts"></script>
+  </body>
+</html>
