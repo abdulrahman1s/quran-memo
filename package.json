@@ -7,18 +7,33 @@
     "quran-memo": "./src/cli.ts"
   },
   "scripts": {
-    "start": "bun run src/cli.ts",
-    "web": "bun run src/cli.ts --web",
+    "start": "bun run build:web && bun run src/cli.ts",
+    "web": "bun run build:web && bun run src/cli.ts --web",
     "build:web": "bun run scripts/build-web.ts",
     "cf:dev": "bun run build:web && bun run scripts/cf-dev.ts",
     "cf:deploy": "bun run build:web && bunx wrangler deploy",
-    "test": "bun test",
+    "test": "bun test --conditions=browser",
     "check": "tsc --noEmit",
-    "build": "bun build --compile src/cli.ts --outfile dist/quran-memo"
+    "lint:web": "prettier --check \"src/web/**/*.{tsx,css,html}\" tests/web-components.test.tsx",
+    "format:web": "prettier --write \"src/web/**/*.{tsx,css,html}\" tests/web-components.test.tsx",
+    "build": "bun run build:web && bun run scripts/build-cli.ts"
   },
   "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/preset-typescript": "^7.27.0",
+    "@happy-dom/global-registrator": "^20.12.0",
+    "@tailwindcss/cli": "^4.3.3",
+    "@types/babel__core": "^7.20.5",
     "@types/bun": "^1.3.0",
+    "babel-preset-solid": "^1.9.0",
+    "happy-dom": "^20.12.0",
+    "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.0",
     "wrangler": "^4.127.1"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.15"
   }
 }

@@ -22,7 +22,8 @@ const pwaBuildVersion = Date.now().toString(36);
 export const serviceWorkerSource = `
 const VERSION = "quran-memo-pwa-${pwaBuildVersion}";
 const OFFLINE_AUDIO = "quran-memo-offline-audio-v1";
-const SHELL = ["./", "./styles.css", "./manifest.webmanifest", "./icon.svg"];
+const FONT_CACHE = "quran-memo-fonts-v1";
+const SHELL = ["./", "./app.js", "./styles.css", "./manifest.webmanifest", "./icon.svg"];
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(VERSION).then((cache) => Promise.all(
     SHELL.map((path) => cache.add(path).catch(() => undefined))
@@ -44,9 +45,18 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  const remoteFont = url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com";
+  if (url.origin !== self.location.origin && !remoteFont) return;
   const dynamic = url.pathname.startsWith("/api/");
   event.respondWith((async () => {
+    if (remoteFont) {
+      const fonts = await caches.open(FONT_CACHE);
+      const cached = await fonts.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok || response.type === "opaque") await fonts.put(request, response.clone());
+      return response;
+    }
     const cache = await caches.open(VERSION);
     const offline = await caches.open(OFFLINE_AUDIO);
     if (url.pathname === "/api/audio") {

@@ -22,11 +22,29 @@ export interface TafsirResource {
 export interface Verse {
   verseKey: string;
   chapterId: number;
+  juzNumber?: number;
+  hizbNumber?: number;
   arabic: string;
   translation: string;
   audioUrl: string;
   words?: Array<{ position: number; text: string }>;
   wordTimings?: Array<{ position: number; startMs: number; endMs: number }>;
+}
+
+export interface ReadingVerse {
+  verseKey: string;
+  arabic: string;
+  pageNumber: number;
+  juzNumber: number;
+  hizbNumber: number;
+  audioUrl: string;
+  words: Array<{
+    position: number;
+    text: string;
+    audioUrl?: string;
+    meaning?: string;
+  }>;
+  wordTimings: Array<{ position: number; startMs: number; endMs: number }>;
 }
 
 export type SessionCycles = number | "forever";

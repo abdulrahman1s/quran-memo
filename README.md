@@ -13,10 +13,14 @@ Mahmoud Khalil Al-Husary — Murattal is the default reciter. Quran text, transl
 ## Features
 
 - Search and select multiple Surahs in Arabic or English.
+- Read any complete Surah in a dedicated Arabic reading view with adjustable automatic scrolling.
 - Play complete Surahs in Quran order.
+- Preload the upcoming Ayah for seamless browser playback when no pause is configured.
 - Repeat each complete Surah three times by default before continuing.
 - Configure Ayah repetitions, Surah repetitions, full-selection cycles, and separate pauses.
 - Choose from Quran.com's available Ayah-by-Ayah reciters.
+- Change the reciter and repeat totals while listening, or jump directly to any Surah without returning to setup.
+- See the current Ayah's Juz and Hizb alongside its Surah and Ayah position.
 - Highlight the currently recited Arabic word using Quran.com timing segments.
 - Announce the Surah name in Arabic before playback begins.
 - Practice with a four-choice “Which Ayah comes next?” audio quiz.
@@ -24,7 +28,7 @@ Mahmoud Khalil Al-Husary — Murattal is the default reciter. Quran text, transl
 - Revisit weak Ayah transitions automatically through an adaptive quiz history stored on the device.
 - Choose a memorization display: full Ayah, first three words, word initials, or hidden text.
 - Read the translation or load a Quran.com Tafsir for the current Ayah.
-- Use the Settings tab to adjust Ayah text scale, Tafsir text size, and playback speed; preferences persist on the device.
+- Use the Settings tab to choose an Arabic typeface, adjust Ayah and Tafsir text sizes, and control playback speed; preferences persist on the device.
 - Copy a practice link that restores the Surahs, reciter, language, repetition rules, and display mode.
 - Install the browser app as a PWA and reuse previously loaded app data offline.
 - Manually download selected Surahs for reliable offline audio, with progress and per-reciter status.
@@ -84,7 +88,7 @@ Open [http://localhost:3000](http://localhost:3000). To use another port:
 bun run start -- --web --port 4321
 ```
 
-The setup screen lets you select a reciter, choose multiple Surahs, configure repetition and memorization cues, and start either a listening session or a memory quiz. Use **Copy practice link** to share the complete setup without forcing audio to autoplay for the recipient.
+The setup screen lets you select a reciter, choose multiple Surahs, configure repetition and memorization cues, and start either a listening session or a memory quiz. The **Reading** tab opens a complete Surah as continuous Arabic text; its start/pause control scrolls the page automatically, and the speed can be changed in **Settings**. Use **Copy practice link** to share the complete setup without forcing audio to autoplay for the recipient.
 
 The app includes a web manifest and service worker. On a supporting browser, use the browser's **Install app** or **Add to Home Screen** action. The interface, previously requested session data, and Tafsir can be reused from browser storage when available. Audio continues to use the browser HTTP cache and the server or Cloudflare audio cache.
 
@@ -231,18 +235,20 @@ src/
 ├── select.ts          Interactive terminal selectors
 ├── worker.ts          Cloudflare Worker API and edge cache
 └── web/
-    ├── app.ts         Browser application
+    ├── app.tsx        Solid application shell and browser controllers
+    ├── components/    Shared Solid UI primitives
+    ├── features/      Practice, reading, and settings feature views
     ├── adaptive.ts    Persistent weak-transition prioritization
     ├── index.html     Interface markup
     ├── memorization.ts Text-cue display modes
     ├── practice-link.ts Shareable session serialization
     ├── pwa-assets.ts  Web manifest, icon, and offline service worker
-    ├── styles.css     Responsive English and Arabic styles
+    ├── styles.css     Tailwind theme and irreducible browser styles
     ├── quiz.ts        Quiz choice and scoring logic
     └── timing.ts      Recitation word-highlight synchronization
 ```
 
-The browser interface uses plain HTML, CSS, and TypeScript. The only installed packages are TypeScript typings/tooling and Wrangler for Cloudflare development.
+The browser interface uses SolidJS and Tailwind CSS, compiled by Bun. The Bun build uses a small local Babel-based Solid transform because Bun does not natively apply Solid's reactive JSX compilation.
 
 ## Data sources and attribution
 

@@ -1,8 +1,8 @@
-import index from "./index.html";
 import { DEFAULT_RECITER_ID, QuranClient } from "../api.ts";
 import { DiskCache } from "../cache.ts";
 import { parseSurahSpec } from "../args.ts";
 import { pwaIcon, pwaManifest, serviceWorkerSource } from "./pwa-assets.ts";
+import { parseByteRange } from "./range.ts";
 
 interface WebServerOptions {
   port: number;
@@ -39,20 +39,16 @@ async function audioFileResponse(request: Request, path: string): Promise<Respon
   const range = request.headers.get("range");
   if (!range) return new Response(file, { headers: { ...baseHeaders, "content-length": String(size) } });
 
-  const match = range.match(/^bytes=(\d*)-(\d*)$/);
-  if (!match) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
-  const start = match[1] ? Number(match[1]) : 0;
-  const end = match[2] ? Number(match[2]) : size - 1;
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= size) {
+  const parsed = parseByteRange(range, size);
+  if (!parsed) {
     return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
   }
-  const boundedEnd = Math.min(end, size - 1);
-  return new Response(file.slice(start, boundedEnd + 1), {
+  return new Response(file.slice(parsed.start, parsed.end + 1), {
     status: 206,
     headers: {
       ...baseHeaders,
-      "content-length": String(boundedEnd - start + 1),
-      "content-range": `bytes ${start}-${boundedEnd}/${size}`,
+      "content-length": String(parsed.end - parsed.start + 1),
+      "content-range": `bytes ${parsed.start}-${parsed.end}/${size}`,
     },
   });
 }
@@ -63,11 +59,22 @@ export function startWebServer({ port, cache }: WebServerOptions) {
   const server = Bun.serve({
     port,
     routes: {
-      "/": index,
+      "/": new Response(Bun.file("dist/web/index.html"), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" },
+      }),
+      "/app.js": new Response(Bun.file("dist/web/app.js"), {
+        headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" },
+      }),
+      "/styles.css": new Response(Bun.file("dist/web/styles.css"), {
+        headers: { "content-type": "text/css; charset=utf-8", "cache-control": "no-cache" },
+      }),
       "/manifest.webmanifest": new Response(pwaManifest, {
         headers: { "content-type": "application/manifest+json", "cache-control": "no-cache" },
       }),
       "/icon.svg": new Response(pwaIcon, {
+        headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" },
+      }),
+      "/besmllah.svg": new Response(Bun.file("besmllah.svg"), {
         headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" },
       }),
       "/sw.js": new Response(serviceWorkerSource, {
@@ -84,6 +91,25 @@ export function startWebServer({ port, cache }: WebServerOptions) {
             });
           } catch (error) {
             return errorResponse(error);
+          }
+        },
+      },
+      "/api/reading": {
+        GET: async (request) => {
+          try {
+            const chapterId = positiveQuery(new URL(request.url).searchParams.get("chapter"), "Surah", 114);
+            const reciterId = positiveQuery(new URL(request.url).searchParams.get("reciter"), "Reciter");
+            const chapter = (await api.chapters()).find((item) => item.id === chapterId);
+            if (!chapter) throw new Error("Surah is unavailable.");
+            const verses = (await api.readingVersesForChapter(chapter, reciterId)).map((verse) => ({
+              ...verse,
+              audioUrl: `/api/audio?reciter=${reciterId}&chapter=${chapter.id}&verse=${verse.verseKey.split(":")[1]}`,
+            }));
+            return json({ chapter, verses }, {
+              headers: { "cache-control": "public, max-age=86400" },
+            });
+          } catch (error) {
+            return errorResponse(error, 400);
           }
         },
       },

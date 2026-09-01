@@ -5,6 +5,8 @@ const CATALOG_TTL_SECONDS = 24 * 60 * 60;
 const SESSION_TTL_SECONDS = 5 * 60;
 const AUDIO_TTL_SECONDS = 365 * 24 * 60 * 60;
 const CATALOG_CACHE_VERSION = "3";
+const READING_CACHE_VERSION = "4";
+const SESSION_CACHE_VERSION = "2";
 const TAFSIR_CACHE_VERSION = "2";
 
 interface WorkerContext {
@@ -89,11 +91,17 @@ async function audioResponse(
   fetchFn: FetchLike,
 ): Promise<Response> {
   const source = trustedAudioUrl(new URL(request.url).searchParams.get("source"));
-  const cached = await cache.match(request);
-  if (cached) return cached;
+  const range = request.headers.get("range");
+  if (!range) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+  }
 
   const upstream = await fetchFn(source, {
-    headers: { accept: "audio/mpeg,audio/*;q=0.9,*/*;q=0.1" },
+    headers: {
+      accept: "audio/mpeg,audio/*;q=0.9,*/*;q=0.1",
+      ...(range ? { range } : {}),
+    },
     signal: request.signal,
   });
   if (!upstream.ok || !upstream.body) {
@@ -104,8 +112,10 @@ async function audioResponse(
   headers.set("cache-control", `public, max-age=${AUDIO_TTL_SECONDS}, immutable`);
   headers.set("content-type", upstream.headers.get("content-type") || "audio/mpeg");
   headers.delete("set-cookie");
-  const response = new Response(upstream.body, { status: 200, headers });
-  context.waitUntil(cache.put(new Request(request.url), response.clone()));
+  const response = new Response(upstream.body, { status: upstream.status, headers });
+  if (!range && upstream.status === 200) {
+    context.waitUntil(cache.put(new Request(request.url), response.clone()));
+  }
   return response;
 }
 
@@ -128,8 +138,25 @@ async function handleApi(
     });
   }
 
+  if (url.pathname === "/api/reading") {
+    return cachedJson(cache, versionedCacheRequest(request, READING_CACHE_VERSION), context, CATALOG_TTL_SECONDS, async () => {
+      const chapterId = positiveQuery(url.searchParams.get("chapter"), "Surah");
+      if (chapterId > 114) throw new Error("Surah is invalid.");
+      const reciterId = positiveQuery(url.searchParams.get("reciter"), "Reciter");
+      const chapter = (await api.chapters()).find((item) => item.id === chapterId);
+      if (!chapter) throw new Error("Surah is unavailable.");
+      const verses = (await api.readingVersesForChapter(chapter, reciterId)).map(
+        (verse) => ({
+          ...verse,
+          audioUrl: proxiedAudioUrl(verse.audioUrl),
+        }),
+      );
+      return json({ chapter, verses });
+    });
+  }
+
   if (url.pathname === "/api/session") {
-    return cachedJson(cache, request, context, SESSION_TTL_SECONDS, async () => {
+    return cachedJson(cache, versionedCacheRequest(request, SESSION_CACHE_VERSION), context, SESSION_TTL_SECONDS, async () => {
       const ids = parseSurahSpec(url.searchParams.get("surahs") ?? "");
       const reciterId = positiveQuery(url.searchParams.get("reciter"), "Reciter");
       const chapters = (await api.chapters()).filter((chapter) => ids.includes(chapter.id));
