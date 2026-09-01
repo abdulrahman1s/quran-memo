@@ -292,4 +292,37 @@ describe("Cloudflare Worker", () => {
     expect(await response.json()).toEqual({ text: "An explanation." });
     expect(calls).toBe(1);
   });
+
+  test("serves a distinct Arabic meaning for the selected Quran word", async () => {
+    const worker = createWorker(
+      async (input) => {
+        expect(new URL(String(input)).pathname).toBe("/v1/ayah/1/2/book/2013");
+        return Response.json({
+          book: {
+            name: "معاني الكلمات من كتاب السراج",
+            author: { ar_name: "محمد الخضيري" },
+          },
+          content: [
+            {
+              text: "رَبِّ: الرَّبُّ المُرَبِّي لِخَلْقِهِ.<br>الْعَالَمِينَ: كُلِّ مَنْ سِوَى اللهِ تَعَالَى.",
+            },
+          ],
+        });
+      },
+      () => new MemoryCache() as unknown as Cache,
+    );
+    const response = await worker.fetch(
+      new Request(
+        "https://quran.example/api/word-meaning?verse=1%3A2&word=%D9%B1%D9%84%D9%92%D8%B9%D9%8E%D9%80%D9%B0%D9%84%D9%8E%D9%85%D9%90%D9%8A%D9%86%D9%8E",
+      ),
+      {} as never,
+      context(),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      matchedWord: "الْعَالَمِينَ",
+      text: "كُلِّ مَنْ سِوَى اللهِ تَعَالَى.",
+      sourceAuthor: "محمد الخضيري",
+    });
+  });
 });

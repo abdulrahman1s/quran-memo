@@ -3,6 +3,7 @@ import {
   QuranApiError,
   QuranClient,
   resolveAudioUrl,
+  selectArabicWordMeaning,
   stripTranslationHtml,
 } from "../src/api.ts";
 import type { Chapter } from "../src/types.ts";
@@ -23,6 +24,18 @@ describe("Quran API helpers", () => {
     expect(resolveAudioUrl("https://cdn.example/ayah.mp3")).toBe(
       "https://cdn.example/ayah.mp3",
     );
+  });
+
+  test("selects an Arabic Quran word meaning despite Uthmani marks", () => {
+    expect(
+      selectArabicWordMeaning(
+        "رَبِّ: الرَّبُّ المُرَبِّي لِخَلْقِهِ.<br>الْعَالَمِينَ: كُلِّ مَنْ سِوَى اللهِ تَعَالَى.",
+        "ٱلْعَـٰلَمِينَ",
+      ),
+    ).toEqual({
+      word: "الْعَالَمِينَ",
+      meaning: "كُلِّ مَنْ سِوَى اللهِ تَعَالَى.",
+    });
   });
 
   test("resolves protocol-relative Quranicaudio mirror URLs", () => {
@@ -297,6 +310,12 @@ test("Tafsir resources and verse text are normalized", async () => {
                     : "Tafsir",
               },
             },
+            {
+              id: 16,
+              name: "Tafsir Muyassar",
+              language_name: "arabic",
+              translated_name: { name: "Tafsir Muyassar" },
+            },
           ],
         })
       : Response.json({
@@ -309,6 +328,12 @@ test("Tafsir resources and verse text are normalized", async () => {
       nameEnglish: "Tafsir",
       nameArabic: "التفسير",
       languageName: "english",
+    },
+    {
+      id: 16,
+      nameEnglish: "Tafsir Muyassar",
+      nameArabic: "التفسير الميسر",
+      languageName: "arabic",
     },
   ]);
   expect(await client.tafsirForVerse(169, "1:1")).toBe("Meaning & context");

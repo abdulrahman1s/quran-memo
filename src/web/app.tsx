@@ -38,6 +38,7 @@ import {
 } from "./navigation.ts";
 import { translate, type Language, type MessageKey } from "./i18n.ts";
 import type {
+  ArabicWordMeaningPayload,
   CatalogPayload,
   Chapter,
   ReadingPayload,
@@ -184,13 +185,25 @@ export function App() {
     word: ReadingPayload["verses"][number]["words"][number];
     verseKey: string;
   }>();
+  const [readingInsightScope, setReadingInsightScope] = createSignal<
+    "word" | "ayah"
+  >("word");
+  const [readingInsightAyahExpanded, setReadingInsightAyahExpanded] =
+    createSignal(false);
   const [readingInsightTafsir, setReadingInsightTafsir] = createSignal("");
   const [readingInsightLoading, setReadingInsightLoading] = createSignal(false);
+  const [readingInsightWordMeaning, setReadingInsightWordMeaning] =
+    createSignal<ArabicWordMeaningPayload>();
+  const [readingInsightWordLoading, setReadingInsightWordLoading] =
+    createSignal(false);
+  const [readingInsightAyahTruncated, setReadingInsightAyahTruncated] =
+    createSignal(false);
   const [mushafAudioVisible, setMushafAudioVisible] = createSignal(false);
   const [mushafPlaying, setMushafPlaying] = createSignal(false);
   const [mushafAyah, setMushafAyah] = createSignal(0);
   const [mushafTime, setMushafTime] = createSignal(0);
   const [mushafDuration, setMushafDuration] = createSignal(0);
+  const [mushafSeekWord, setMushafSeekWord] = createSignal<string>();
   const [autoScroll, setAutoScroll] = createSignal(false);
   const [autoScrollDone, setAutoScrollDone] = createSignal(false);
   let scrollFrame: number | undefined;
@@ -255,6 +268,8 @@ export function App() {
   let mushafAudio!: HTMLAudioElement;
   let delayTimer: number | undefined;
   let readingWordTimer: number | undefined;
+  let mushafSeekHighlightTimer: number | undefined;
+  let mushafPlayRequest = 0;
   let readingWordRequest = 0;
   const unavailableWordAudio = new Set<string>();
   let readingWordPlayback:
@@ -272,10 +287,18 @@ export function App() {
   let readingAudioReciterId = reciterId();
   let tafsirRequest = 0;
   let readingInsightRequest = 0;
+  let readingInsightWordRequest = 0;
 
   const chapters = () => catalog()?.chapters ?? [];
   const reciters = () => catalog()?.reciters ?? [];
   const tafsirs = () => catalog()?.tafsirs ?? [];
+  const localizedTafsirs = () => {
+    const target = language() === "ar" ? "arabic" : "english";
+    const matching = tafsirs().filter(
+      (item) => item.languageName.toLocaleLowerCase() === target,
+    );
+    return matching.length ? matching : tafsirs();
+  };
   const visibleChapters = createMemo(() =>
     filterChapters(chapters(), search()),
   );
@@ -640,14 +663,100 @@ export function App() {
     }
   }
 
-  async function inspectReadingWord(
+  function inspectReadingWord(
     verse: ReadingPayload["verses"][number],
     position: number,
-  ): Promise<void> {
+  ): void {
     const word = verse.words.find((item) => item.position === position);
     if (!word) return;
+    readingInsightRequest += 1;
+    readingInsightWordRequest += 1;
+    setReadingInsightScope("word");
+    setReadingInsightAyahExpanded(false);
+    setReadingInsightAyahTruncated(false);
+    setReadingInsightTafsir("");
+    setReadingInsightLoading(false);
+    setReadingInsightWordMeaning();
+    setReadingInsightWordLoading(false);
     setReadingInsight({ word, verseKey: verse.verseKey });
-    await loadReadingInsightTafsir(verse.verseKey);
+    if (language() === "ar")
+      void loadReadingInsightWordMeaning(verse.verseKey, word.text);
+  }
+
+  function toggleReadingInsightAudio(): void {
+    const insight = readingInsight();
+    if (!insight) return;
+    const key = `${insight.verseKey}:${insight.word.position}`;
+    if (readingWord() === key) {
+      stopReadingWord();
+      return;
+    }
+    const verse = reading()?.verses.find(
+      (item) => item.verseKey === insight.verseKey,
+    );
+    if (verse) void playReadingWord(verse, insight.word.position);
+  }
+
+  function readingInsightVerse(): ReadingPayload["verses"][number] | undefined {
+    const insight = readingInsight();
+    if (!insight) return;
+    return reading()?.verses.find((item) => item.verseKey === insight.verseKey);
+  }
+
+  function showReadingInsightAyah(): void {
+    const insight = readingInsight();
+    if (!insight) return;
+    setReadingInsightScope("ayah");
+    setReadingInsightAyahExpanded(false);
+    setReadingInsightAyahTruncated(false);
+    if (!readingInsightTafsir() && !readingInsightLoading())
+      void loadReadingInsightTafsir(insight.verseKey);
+  }
+
+  function showReadingInsightWord(): void {
+    const insight = readingInsight();
+    if (!insight) return;
+    setReadingInsightScope("word");
+    if (
+      language() === "ar" &&
+      !readingInsightWordMeaning() &&
+      !readingInsightWordLoading()
+    )
+      void loadReadingInsightWordMeaning(insight.verseKey, insight.word.text);
+  }
+
+  async function loadReadingInsightWordMeaning(
+    verseKey: string,
+    word: string,
+  ): Promise<void> {
+    const request = ++readingInsightWordRequest;
+    setReadingInsightWordMeaning();
+    setReadingInsightWordLoading(true);
+    try {
+      const payload = await getJson<ArabicWordMeaningPayload>(
+        `/api/word-meaning?verse=${encodeURIComponent(verseKey)}&word=${encodeURIComponent(word)}`,
+      );
+      if (request === readingInsightWordRequest)
+        setReadingInsightWordMeaning(payload);
+    } catch {
+      if (request === readingInsightWordRequest)
+        setReadingInsightWordMeaning({
+          text: "",
+          sourceName: "",
+          sourceAuthor: "",
+        });
+    } finally {
+      if (request === readingInsightWordRequest)
+        setReadingInsightWordLoading(false);
+    }
+  }
+
+  function closeReadingInsight(): void {
+    readingInsightRequest += 1;
+    readingInsightWordRequest += 1;
+    setReadingInsightLoading(false);
+    setReadingInsightWordLoading(false);
+    setReadingInsight();
   }
 
   async function loadReadingInsightTafsir(
@@ -673,6 +782,11 @@ export function App() {
   }
 
   function stopMushafAudio(removeSource = false, hide = false): void {
+    mushafPlayRequest += 1;
+    if (mushafSeekHighlightTimer !== undefined)
+      clearTimeout(mushafSeekHighlightTimer);
+    mushafSeekHighlightTimer = undefined;
+    setMushafSeekWord();
     if (mushafAudio) {
       mushafAudio.pause();
       if (removeSource) {
@@ -686,14 +800,43 @@ export function App() {
     if (hide) setMushafAudioVisible(false);
   }
 
-  async function playMushafAyah(index = mushafAyah()): Promise<void> {
+  async function waitForMushafMetadata(): Promise<void> {
+    if (mushafAudio.readyState >= HTMLMediaElement.HAVE_METADATA) return;
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        mushafAudio.removeEventListener("loadedmetadata", loaded);
+        mushafAudio.removeEventListener("error", failed);
+      };
+      const loaded = () => {
+        cleanup();
+        resolve();
+      };
+      const failed = () => {
+        cleanup();
+        reject(mushafAudio.error ?? new Error("Audio metadata failed"));
+      };
+      mushafAudio.addEventListener("loadedmetadata", loaded, { once: true });
+      mushafAudio.addEventListener("error", failed, { once: true });
+    });
+  }
+
+  async function playMushafAyah(
+    index = mushafAyah(),
+    startSeconds = 0,
+    seekWordKey?: string,
+  ): Promise<void> {
     const verses = reading()?.verses ?? [];
     const next = Math.min(verses.length - 1, Math.max(0, index));
     const verse = verses[next];
     if (!verse || !mushafAudio) return;
+    const request = ++mushafPlayRequest;
     stopReadingWord();
+    if (mushafSeekHighlightTimer !== undefined)
+      clearTimeout(mushafSeekHighlightTimer);
+    mushafSeekHighlightTimer = undefined;
+    setMushafSeekWord(seekWordKey);
     setMushafPlaying(false);
-    setMushafTime(0);
+    setMushafTime(startSeconds);
     setMushafDuration(0);
     setMushafAyah(next);
     setMushafAudioVisible(true);
@@ -703,16 +846,22 @@ export function App() {
       mushafAudio.load();
     }
     try {
-      mushafAudio.currentTime = 0;
-    } catch {
-      /* A freshly loaded media element already starts at zero. */
-    }
-    mushafAudio.playbackRate = preferences().playbackSpeed / 100;
-    try {
+      await waitForMushafMetadata();
+      if (request !== mushafPlayRequest) return;
+      mushafAudio.currentTime = Math.max(0, startSeconds);
+      mushafAudio.playbackRate = preferences().playbackSpeed / 100;
       await mushafAudio.play();
+      if (request !== mushafPlayRequest) return;
       setMushafPlaying(true);
+      if (seekWordKey)
+        mushafSeekHighlightTimer = window.setTimeout(() => {
+          setMushafSeekWord();
+          mushafSeekHighlightTimer = undefined;
+        }, 320);
       preloadNextMushafAyah(next);
     } catch {
+      if (request !== mushafPlayRequest) return;
+      setMushafSeekWord();
       setMushafPlaying(false);
       notify(tr("playbackFailed"), true);
     }
@@ -771,6 +920,21 @@ export function App() {
     const wasVisible = mushafAudioVisible();
     const wasPlaying = mushafPlaying();
     const ayah = mushafAyah();
+    const activeVerse = current.verses[ayah];
+    const soughtPosition = mushafSeekWord()?.startsWith(
+      `${activeVerse?.verseKey}:`,
+    )
+      ? Number(mushafSeekWord()?.split(":").at(-1))
+      : null;
+    const activePosition =
+      soughtPosition && Number.isInteger(soughtPosition)
+        ? soughtPosition
+        : activeVerse
+          ? activeWordPosition(
+              activeVerse.wordTimings,
+              mushafAudio.currentTime * 1000,
+            )
+          : null;
     const request = ++readingRequest;
     stopReadingWord();
     if (mushafAudio) mushafAudio.pause();
@@ -797,14 +961,29 @@ export function App() {
         return {
           ...verse,
           audioUrl: refreshed.audioUrl,
-          wordTimings: refreshed.wordTimings,
+          wordTimings: refreshed.wordTimings.length
+            ? refreshed.wordTimings
+            : verse.wordTimings,
         };
       });
       setReading({ ...current, verses });
       readingAudioReciterId = next;
       setMushafAyah(Math.min(ayah, Math.max(0, verses.length - 1)));
       setMushafAudioVisible(wasVisible);
-      if (wasPlaying) await playMushafAyah(mushafAyah());
+      if (wasPlaying) {
+        const verse = verses[mushafAyah()];
+        const start =
+          activePosition === null || !verse
+            ? 0
+            : (wordStartSeconds(verse.wordTimings, activePosition) ?? 0);
+        await playMushafAyah(
+          mushafAyah(),
+          start,
+          activePosition === null || !verse
+            ? undefined
+            : `${verse.verseKey}:${activePosition}`,
+        );
+      }
     } catch {
       if (request !== readingRequest) return;
       setReciterId(previousReciter);
@@ -827,10 +1006,12 @@ export function App() {
         ? 0
         : (verse.wordTimings.find((item) => item.position === position)
             ?.startMs ?? 0);
-    await playMushafAyah(index);
     const start = Math.max(0, startMs / 1000);
-    if (mushafAudio) mushafAudio.currentTime = start;
-    setMushafTime(start);
+    await playMushafAyah(
+      index,
+      start,
+      position === undefined ? undefined : `${verse.verseKey}:${position}`,
+    );
   }
 
   function savePreferences(next: Preferences): void {
@@ -1257,7 +1438,15 @@ export function App() {
           false,
         );
     };
-    const stopScroll = () => autoScroll() && pauseAutoScroll();
+    const stopScroll = (event: Event) => {
+      const target = event.target;
+      if (
+        !autoScroll() ||
+        (target instanceof Element && target.closest('[role="listbox"]'))
+      )
+        return;
+      pauseAutoScroll();
+    };
     window.addEventListener("popstate", popstate);
     window.addEventListener("wheel", stopScroll, { passive: true });
     window.addEventListener("touchmove", stopScroll, { passive: true });
@@ -1270,6 +1459,7 @@ export function App() {
       stopMushafAudio(true, true);
       pauseAutoScroll();
       clearTimeout(toastTimer);
+      clearTimeout(mushafSeekHighlightTimer);
     });
     if ("serviceWorker" in navigator)
       window.addEventListener(
@@ -1297,6 +1487,8 @@ export function App() {
     activeWordPosition(currentVerse()?.wordTimings ?? [], currentTime() * 1000),
   );
   const mushafHighlightedWord = createMemo(() => {
+    const soughtWord = mushafSeekWord();
+    if (soughtWord) return soughtWord;
     if (!mushafAudioVisible() || !mushafPlaying()) return;
     const verse = reading()?.verses[mushafAyah()];
     if (!verse) return;
@@ -1414,9 +1606,7 @@ export function App() {
                     playWord={(verse, position) =>
                       void playReadingWord(verse, position)
                     }
-                    inspectWord={(verse, position) =>
-                      void inspectReadingWord(verse, position)
-                    }
+                    inspectWord={inspectReadingWord}
                     seekWord={(verse, position) =>
                       void seekMushafAudio(verse, position)
                     }
@@ -1479,16 +1669,13 @@ export function App() {
         {(insight) => (
           <div
             class="fixed inset-0 z-[90] grid items-end bg-black/60 p-3 backdrop-blur-[3px] md:place-items-center"
-            onClick={() => {
-              readingInsightRequest += 1;
-              setReadingInsight();
-            }}
+            onClick={closeReadingInsight}
           >
             <section
               role="dialog"
               aria-modal="true"
               aria-label={tr("wordMeaning")}
-              class="w-full max-w-[560px] animate-rise rounded-[24px] border border-white/12 bg-[#17251f] p-5 shadow-[0_30px_90px_rgba(0,0,0,.55)] max-md:rounded-b-[18px]"
+              class="memo-scrollbar max-h-[calc(100dvh-24px)] w-full max-w-[560px] animate-rise overflow-y-auto rounded-[24px] border border-white/12 bg-[#17251f] p-5 shadow-[0_30px_90px_rgba(0,0,0,.55)] max-md:rounded-b-[18px] md:max-h-[88dvh]"
               onClick={(event) => event.stopPropagation()}
             >
               <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15 md:hidden" />
@@ -1500,54 +1687,201 @@ export function App() {
                   <strong class="font-reader-arabic mt-1 block text-[36px] leading-normal text-ink">
                     {insight().word.text}
                   </strong>
-                  <p class="mt-1 text-sm text-[#cbd5cf]" dir="ltr">
-                    {insight().word.meaning ?? "—"}
-                  </p>
                 </div>
-                <button
-                  class="grid size-9 place-items-center rounded-full border border-white/10 text-muted"
-                  aria-label={tr("closePlayer")}
-                  onClick={() => {
-                    readingInsightRequest += 1;
-                    setReadingInsight();
-                  }}
-                >
-                  <Icon name="close" class="size-4" />
-                </button>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class={`inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-[11px] font-bold transition ${
+                      readingWord() ===
+                      `${insight().verseKey}:${insight().word.position}`
+                        ? "border-gold/45 bg-gold/12 text-gold"
+                        : "border-white/12 text-[#cbd5cf] hover:border-gold/35 hover:text-gold"
+                    }`}
+                    aria-label={tr("playFromWord", {
+                      word: insight().word.text,
+                    })}
+                    aria-pressed={
+                      readingWord() ===
+                      `${insight().verseKey}:${insight().word.position}`
+                    }
+                    onClick={toggleReadingInsightAudio}
+                  >
+                    <Icon
+                      name={
+                        readingWord() ===
+                        `${insight().verseKey}:${insight().word.position}`
+                          ? "pause"
+                          : "play"
+                      }
+                      class="size-3.5"
+                    />
+                    <span>
+                      {tr(
+                        readingWord() ===
+                          `${insight().verseKey}:${insight().word.position}`
+                          ? "pause"
+                          : "listen",
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    class="grid size-9 place-items-center rounded-full border border-white/10 text-muted"
+                    aria-label={tr("closePlayer")}
+                    onClick={closeReadingInsight}
+                  >
+                    <Icon name="close" class="size-4" />
+                  </button>
+                </div>
               </header>
               <div class="pt-4">
-                <div class="flex items-center justify-between gap-4">
-                  <b class="text-xs text-gold">{tr("ayahTafsir")}</b>
+                <div class="mb-2 flex items-center justify-between gap-4 px-1">
+                  <b class="text-[10px] font-bold tracking-wider text-gold uppercase">
+                    {tr("tafsirScope")}
+                  </b>
                   <span class="font-mono text-[10px] text-muted">
                     {insight().verseKey}
                   </span>
                 </div>
-                <div class="mt-3">
-                  <CustomSelect
-                    label={tr("tafsir")}
-                    value={tafsirId()}
-                    options={tafsirs().map((item) => ({
-                      value: item.id,
-                      label:
-                        language() === "ar"
-                          ? item.nameArabic
-                          : item.nameEnglish,
-                    }))}
-                    onChange={(value) => {
-                      const next = Number(value);
-                      setTafsirId(next);
-                      void loadReadingInsightTafsir(insight().verseKey, next);
-                    }}
-                  />
+                <div class="grid grid-cols-2 rounded-xl border border-white/10 bg-black/15 p-1">
+                  <button
+                    type="button"
+                    class={`min-h-10 rounded-lg px-3 text-xs font-bold transition ${
+                      readingInsightScope() === "word"
+                        ? "bg-gold text-[#142019] shadow-sm"
+                        : "text-muted hover:text-ink"
+                    }`}
+                    aria-pressed={readingInsightScope() === "word"}
+                    onClick={showReadingInsightWord}
+                  >
+                    {tr("wordScope")}
+                  </button>
+                  <button
+                    type="button"
+                    class={`min-h-10 rounded-lg px-3 text-xs font-bold transition ${
+                      readingInsightScope() === "ayah"
+                        ? "bg-gold text-[#142019] shadow-sm"
+                        : "text-muted hover:text-ink"
+                    }`}
+                    aria-pressed={readingInsightScope() === "ayah"}
+                    onClick={showReadingInsightAyah}
+                  >
+                    {tr("fullAyahScope")}
+                  </button>
                 </div>
-                <p
-                  class="tafsir-reader memo-scrollbar mt-3 max-h-[38dvh] overflow-auto text-start leading-8 whitespace-pre-line text-[#bdc9c2]"
-                  dir="auto"
+                <Show
+                  when={readingInsightScope() === "ayah"}
+                  fallback={
+                    <div class="mt-3 rounded-2xl border border-white/10 bg-black/10 px-4 py-5">
+                      <p class="text-[10px] font-bold tracking-wider text-gold uppercase">
+                        {tr(
+                          language() === "ar"
+                            ? "arabicWordMeaning"
+                            : "wordMeaning",
+                        )}
+                      </p>
+                      <Show
+                        when={language() === "ar"}
+                        fallback={
+                          <p
+                            class="mt-2 text-start text-[17px] leading-7 text-[#d8e0db]"
+                            dir="auto"
+                          >
+                            {insight().word.meaning ?? "—"}
+                          </p>
+                        }
+                      >
+                        <p
+                          class="tafsir-reader mt-3 text-start leading-8 text-[#d8e0db]"
+                          dir="rtl"
+                        >
+                          {readingInsightWordLoading()
+                            ? tr("loadingWordMeaning")
+                            : readingInsightWordMeaning()?.text ||
+                              tr("wordMeaningUnavailable")}
+                        </p>
+                        <Show when={readingInsightWordMeaning()?.sourceName}>
+                          <div class="mt-4 border-t border-white/8 pt-3 text-start">
+                            <span class="block text-[10px] font-bold text-gold">
+                              {readingInsightWordMeaning()?.sourceName}
+                            </span>
+                            <span class="mt-1 block text-[10px] text-muted">
+                              {readingInsightWordMeaning()?.sourceAuthor}
+                            </span>
+                          </div>
+                        </Show>
+                      </Show>
+                    </div>
+                  }
                 >
-                  {readingInsightLoading()
-                    ? tr("loadingTafsir")
-                    : readingInsightTafsir() || tr("chooseTafsir")}
-                </p>
+                  <div class="mt-3 rounded-2xl border border-white/10 bg-black/10 px-4 py-4">
+                    <p
+                      ref={(element) =>
+                        requestAnimationFrame(() =>
+                          setReadingInsightAyahTruncated(
+                            element.scrollHeight > element.clientHeight + 1 ||
+                              (readingInsightVerse()?.arabic.length ?? 0) > 90,
+                          ),
+                        )
+                      }
+                      class="font-reader-arabic text-center text-[21px] leading-[2] text-ink"
+                      classList={{
+                        "insight-ayah-collapsed": !readingInsightAyahExpanded(),
+                        "memo-scrollbar max-h-[24dvh] overflow-y-auto":
+                          readingInsightAyahExpanded(),
+                      }}
+                      dir="rtl"
+                    >
+                      {readingInsightVerse()?.arabic}
+                    </p>
+                    <Show
+                      when={
+                        readingInsightAyahTruncated() ||
+                        readingInsightAyahExpanded()
+                      }
+                    >
+                      <button
+                        type="button"
+                        class="mx-auto mt-2 block min-h-7 rounded-full px-3 text-[10px] font-bold text-gold transition hover:bg-gold/8"
+                        aria-expanded={readingInsightAyahExpanded()}
+                        onClick={() =>
+                          setReadingInsightAyahExpanded((value) => !value)
+                        }
+                      >
+                        {tr(
+                          readingInsightAyahExpanded()
+                            ? "collapseAyah"
+                            : "expandAyah",
+                        )}
+                      </button>
+                    </Show>
+                  </div>
+                  <div class="mt-3">
+                    <CustomSelect
+                      label={tr("tafsir")}
+                      value={tafsirId()}
+                      options={localizedTafsirs().map((item) => ({
+                        value: item.id,
+                        label:
+                          language() === "ar"
+                            ? item.nameArabic
+                            : item.nameEnglish,
+                      }))}
+                      onChange={(value) => {
+                        const next = Number(value);
+                        setTafsirId(next);
+                        void loadReadingInsightTafsir(insight().verseKey, next);
+                      }}
+                    />
+                  </div>
+                  <p
+                    class="tafsir-reader memo-scrollbar mt-3 max-h-[38dvh] overflow-auto text-start leading-8 whitespace-pre-line text-[#bdc9c2]"
+                    dir="auto"
+                  >
+                    {readingInsightLoading()
+                      ? tr("loadingTafsir")
+                      : readingInsightTafsir() || tr("chooseTafsir")}
+                  </p>
+                </Show>
               </div>
             </section>
           </div>
@@ -1864,7 +2198,7 @@ export function App() {
                         <CustomSelect
                           label={tr("tafsir")}
                           value={tafsirId()}
-                          options={tafsirs().map((item) => ({
+                          options={localizedTafsirs().map((item) => ({
                             value: item.id,
                             label:
                               language() === "ar"

@@ -12,6 +12,16 @@ const AUDIO_BASE = "https://verses.quran.foundation/";
 export const ENGLISH_TRANSLATION_ID = 85;
 export const DEFAULT_RECITER_ID = 6;
 
+const ARABIC_TAFSIR_NAMES: Record<number, string> = {
+  14: "تفسير ابن كثير",
+  15: "تفسير الطبري",
+  16: "التفسير الميسر",
+  90: "تفسير القرطبي",
+  91: "تفسير السعدي",
+  93: "التفسير الوسيط للطنطاوي",
+  94: "تفسير البغوي",
+};
+
 type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit,
@@ -74,6 +84,60 @@ interface TafsirsResponse {
 
 interface VerseTafsirResponse {
   tafsir?: { text?: string };
+}
+
+interface QuranpediaWordMeaningsResponse {
+  book?: {
+    name?: string;
+    author?: { ar_name?: string } | null;
+  };
+  content?: Array<{ text?: string }>;
+}
+
+export interface ArabicWordMeaning {
+  text: string;
+  matchedWord?: string;
+  sourceName: string;
+  sourceAuthor: string;
+}
+
+function normalizedArabic(input: string): string {
+  return input
+    .replace(/\u0670/g, "ا")
+    .normalize("NFKD")
+    .replace(/[ٱأإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/[ؤئ]/g, (value) => (value === "ؤ" ? "و" : "ي"))
+    .replace(/[\p{M}\u0640]/gu, "")
+    .replace(/[^\p{Script=Arabic}\s]/gu, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+export function selectArabicWordMeaning(
+  content: string,
+  selectedWord: string,
+): { word: string; meaning: string } | undefined {
+  const selected = normalizedArabic(selectedWord);
+  if (!selected) return;
+  const entries = stripTranslationHtml(content)
+    .split("\n")
+    .flatMap((line) => {
+      const separator = line.indexOf(":");
+      if (separator <= 0) return [];
+      const word = line.slice(0, separator).trim();
+      const meaning = line.slice(separator + 1).trim();
+      return word && meaning ? [{ word, meaning }] : [];
+    });
+  return entries.find((entry) => {
+    const candidate = normalizedArabic(entry.word);
+    if (!candidate) return false;
+    return (
+      candidate === selected ||
+      candidate.includes(selected) ||
+      selected.includes(candidate)
+    );
+  });
 }
 
 export class QuranApiError extends Error {
@@ -173,6 +237,23 @@ export class QuranClient {
     return data;
   }
 
+  private async getExternalJson<T>(url: string, cacheKey: string): Promise<T> {
+    const cached = await this.cache?.getJson<T>(cacheKey, REQUEST_CACHE_TTL_MS);
+    if (cached !== undefined && cached !== null) return cached;
+    const response = await this.fetchFn(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!response.ok)
+      throw new QuranApiError(
+        `Quranpedia returned HTTP ${response.status}.`,
+        response.status,
+      );
+    const data = (await response.json()) as T;
+    await this.cache?.setJson(cacheKey, data).catch(() => {});
+    return data;
+  }
+
   async chapters(): Promise<Chapter[]> {
     const data = await this.getJson<ChaptersResponse>("/chapters?language=en");
     if (!Array.isArray(data.chapters) || data.chapters.length !== 114) {
@@ -247,7 +328,10 @@ export class QuranClient {
         {
           id: tafsir.id,
           nameEnglish: tafsir.translated_name?.name || tafsir.name,
-          nameArabic: arabicNames.get(tafsir.id) || tafsir.name,
+          nameArabic:
+            ARABIC_TAFSIR_NAMES[tafsir.id] ||
+            arabicNames.get(tafsir.id) ||
+            tafsir.name,
           languageName: tafsir.language_name || "unknown",
         },
       ];
@@ -269,6 +353,29 @@ export class QuranClient {
     if (typeof text !== "string")
       throw new QuranApiError("Tafsir is unavailable for this Ayah.");
     return stripTranslationHtml(text);
+  }
+
+  async arabicWordMeaning(
+    verseKey: string,
+    selectedWord: string,
+  ): Promise<ArabicWordMeaning> {
+    if (!/^\d{1,3}:\d{1,3}$/.test(verseKey) || !selectedWord.trim())
+      throw new QuranApiError("The requested Quran word is invalid.");
+    const [surah, ayah] = verseKey.split(":");
+    const data = await this.getExternalJson<QuranpediaWordMeaningsResponse>(
+      `https://api.quranpedia.net/v1/ayah/${surah}/${ayah}/book/2013`,
+      `quranpedia-word-meanings:${verseKey}`,
+    );
+    const content = (data.content ?? [])
+      .flatMap((item) => (typeof item.text === "string" ? [item.text] : []))
+      .join("<br>");
+    const match = selectArabicWordMeaning(content, selectedWord);
+    return {
+      text: match?.meaning ?? "",
+      ...(match ? { matchedWord: match.word } : {}),
+      sourceName: "السراج في بيان غريب القرآن",
+      sourceAuthor: data.book?.author?.ar_name ?? "محمد الخضيري",
+    };
   }
 
   async randomVerseText(): Promise<{ verseKey: string; arabic: string }> {

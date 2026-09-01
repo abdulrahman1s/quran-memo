@@ -266,6 +266,12 @@ button.arabic-word {
 button.arabic-word:not(.active):hover {
   color: #d8b872;
 }
+.insight-ayah-collapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 input[type="range"] {
   width: 100%;
   accent-color: #d8b872;

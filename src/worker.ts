@@ -4,10 +4,11 @@ import { parseSurahSpec } from "./surah-spec.ts";
 const CATALOG_TTL_SECONDS = 24 * 60 * 60;
 const SESSION_TTL_SECONDS = 5 * 60;
 const AUDIO_TTL_SECONDS = 365 * 24 * 60 * 60;
-const CATALOG_CACHE_VERSION = "3";
+const CATALOG_CACHE_VERSION = "4";
 const READING_CACHE_VERSION = "4";
 const SESSION_CACHE_VERSION = "2";
 const TAFSIR_CACHE_VERSION = "2";
+const WORD_MEANING_CACHE_VERSION = "1";
 
 interface WorkerContext {
   waitUntil(promise: Promise<unknown>): void;
@@ -19,7 +20,10 @@ interface WorkerEnvironment {
   };
 }
 
-type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+type FetchLike = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
 
 function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
@@ -34,7 +38,8 @@ function errorResponse(error: unknown, status = 500): Response {
 
 function positiveQuery(value: string | null, label: string): number {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${label} is invalid.`);
+  if (!Number.isInteger(parsed) || parsed < 1)
+    throw new Error(`${label} is invalid.`);
   return parsed;
 }
 
@@ -63,7 +68,10 @@ async function cachedJson(
 
   const headers = new Headers(response.headers);
   headers.set("cache-control", `public, max-age=${ttlSeconds}`);
-  const cacheable = new Response(response.body, { status: response.status, headers });
+  const cacheable = new Response(response.body, {
+    status: response.status,
+    headers,
+  });
   context.waitUntil(cache.put(request, cacheable.clone()));
   return cacheable;
 }
@@ -76,10 +84,11 @@ function trustedAudioUrl(value: string | null): URL {
   if (!value) throw new Error("Audio source is missing.");
   const source = new URL(value);
   const hostname = source.hostname.toLowerCase();
-  const trusted = source.protocol === "https:"
-    && (hostname === "verses.quran.foundation"
-      || hostname === "quranicaudio.com"
-      || hostname.endsWith(".quranicaudio.com"));
+  const trusted =
+    source.protocol === "https:" &&
+    (hostname === "verses.quran.foundation" ||
+      hostname === "quranicaudio.com" ||
+      hostname.endsWith(".quranicaudio.com"));
   if (!trusted) throw new Error("Audio source is unavailable.");
   return source;
 }
@@ -90,7 +99,9 @@ async function audioResponse(
   cache: Cache,
   fetchFn: FetchLike,
 ): Promise<Response> {
-  const source = trustedAudioUrl(new URL(request.url).searchParams.get("source"));
+  const source = trustedAudioUrl(
+    new URL(request.url).searchParams.get("source"),
+  );
   const range = request.headers.get("range");
   if (!range) {
     const cached = await cache.match(request);
@@ -109,10 +120,19 @@ async function audioResponse(
   }
 
   const headers = new Headers(upstream.headers);
-  headers.set("cache-control", `public, max-age=${AUDIO_TTL_SECONDS}, immutable`);
-  headers.set("content-type", upstream.headers.get("content-type") || "audio/mpeg");
+  headers.set(
+    "cache-control",
+    `public, max-age=${AUDIO_TTL_SECONDS}, immutable`,
+  );
+  headers.set(
+    "content-type",
+    upstream.headers.get("content-type") || "audio/mpeg",
+  );
   headers.delete("set-cookie");
-  const response = new Response(upstream.body, { status: upstream.status, headers });
+  const response = new Response(upstream.body, {
+    status: upstream.status,
+    headers,
+  });
   if (!range && upstream.status === 200) {
     context.waitUntil(cache.put(new Request(request.url), response.clone()));
   }
@@ -126,72 +146,146 @@ async function handleApi(
   fetchFn: FetchLike,
 ): Promise<Response> {
   const url = new URL(request.url);
-  if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
+  if (request.method !== "GET")
+    return new Response("Method not allowed", { status: 405 });
   const api = new QuranClient(fetchFn);
 
   if (url.pathname === "/api/catalog") {
-    return cachedJson(cache, versionedCacheRequest(request, CATALOG_CACHE_VERSION), context, CATALOG_TTL_SECONDS, async () => {
-      const [chapters, reciters, tafsirs] = await Promise.all([
-        api.chapters(), api.reciters(), api.tafsirs().catch(() => []),
-      ]);
-      return json({ chapters, reciters, tafsirs, defaultReciterId: DEFAULT_RECITER_ID });
-    });
+    return cachedJson(
+      cache,
+      versionedCacheRequest(request, CATALOG_CACHE_VERSION),
+      context,
+      CATALOG_TTL_SECONDS,
+      async () => {
+        const [chapters, reciters, tafsirs] = await Promise.all([
+          api.chapters(),
+          api.reciters(),
+          api.tafsirs().catch(() => []),
+        ]);
+        return json({
+          chapters,
+          reciters,
+          tafsirs,
+          defaultReciterId: DEFAULT_RECITER_ID,
+        });
+      },
+    );
   }
 
   if (url.pathname === "/api/reading") {
-    return cachedJson(cache, versionedCacheRequest(request, READING_CACHE_VERSION), context, CATALOG_TTL_SECONDS, async () => {
-      const chapterId = positiveQuery(url.searchParams.get("chapter"), "Surah");
-      if (chapterId > 114) throw new Error("Surah is invalid.");
-      const reciterId = positiveQuery(url.searchParams.get("reciter"), "Reciter");
-      const chapter = (await api.chapters()).find((item) => item.id === chapterId);
-      if (!chapter) throw new Error("Surah is unavailable.");
-      const verses = (await api.readingVersesForChapter(chapter, reciterId)).map(
-        (verse) => ({
+    return cachedJson(
+      cache,
+      versionedCacheRequest(request, READING_CACHE_VERSION),
+      context,
+      CATALOG_TTL_SECONDS,
+      async () => {
+        const chapterId = positiveQuery(
+          url.searchParams.get("chapter"),
+          "Surah",
+        );
+        if (chapterId > 114) throw new Error("Surah is invalid.");
+        const reciterId = positiveQuery(
+          url.searchParams.get("reciter"),
+          "Reciter",
+        );
+        const chapter = (await api.chapters()).find(
+          (item) => item.id === chapterId,
+        );
+        if (!chapter) throw new Error("Surah is unavailable.");
+        const verses = (
+          await api.readingVersesForChapter(chapter, reciterId)
+        ).map((verse) => ({
           ...verse,
           audioUrl: proxiedAudioUrl(verse.audioUrl),
-        }),
-      );
-      return json({ chapter, verses });
-    });
+        }));
+        return json({ chapter, verses });
+      },
+    );
   }
 
   if (url.pathname === "/api/session") {
-    return cachedJson(cache, versionedCacheRequest(request, SESSION_CACHE_VERSION), context, SESSION_TTL_SECONDS, async () => {
-      const ids = parseSurahSpec(url.searchParams.get("surahs") ?? "");
-      const reciterId = positiveQuery(url.searchParams.get("reciter"), "Reciter");
-      const chapters = (await api.chapters()).filter((chapter) => ids.includes(chapter.id));
-      if (chapters.length !== ids.length) throw new Error("One or more surahs are unavailable.");
-      const groups = await Promise.all(chapters.map(async (chapter) => ({
-        chapter,
-        verses: (await api.versesForChapter(chapter, reciterId)).map((verse) => ({
-          ...verse,
-          audioUrl: proxiedAudioUrl(verse.audioUrl),
-        })),
-      })));
-      const quizPool = groups.flatMap((group) => group.verses.map((verse) => ({
-        verseKey: verse.verseKey,
-        arabic: verse.arabic,
-      })));
-      const seen = new Set(quizPool.map((verse) => verse.verseKey));
-      for (let attempts = 0; quizPool.length < 4 && attempts < 10; attempts += 1) {
-        const random = await api.randomVerseText();
-        if (!seen.has(random.verseKey)) {
-          seen.add(random.verseKey);
-          quizPool.push(random);
+    return cachedJson(
+      cache,
+      versionedCacheRequest(request, SESSION_CACHE_VERSION),
+      context,
+      SESSION_TTL_SECONDS,
+      async () => {
+        const ids = parseSurahSpec(url.searchParams.get("surahs") ?? "");
+        const reciterId = positiveQuery(
+          url.searchParams.get("reciter"),
+          "Reciter",
+        );
+        const chapters = (await api.chapters()).filter((chapter) =>
+          ids.includes(chapter.id),
+        );
+        if (chapters.length !== ids.length)
+          throw new Error("One or more surahs are unavailable.");
+        const groups = await Promise.all(
+          chapters.map(async (chapter) => ({
+            chapter,
+            verses: (await api.versesForChapter(chapter, reciterId)).map(
+              (verse) => ({
+                ...verse,
+                audioUrl: proxiedAudioUrl(verse.audioUrl),
+              }),
+            ),
+          })),
+        );
+        const quizPool = groups.flatMap((group) =>
+          group.verses.map((verse) => ({
+            verseKey: verse.verseKey,
+            arabic: verse.arabic,
+          })),
+        );
+        const seen = new Set(quizPool.map((verse) => verse.verseKey));
+        for (
+          let attempts = 0;
+          quizPool.length < 4 && attempts < 10;
+          attempts += 1
+        ) {
+          const random = await api.randomVerseText();
+          if (!seen.has(random.verseKey)) {
+            seen.add(random.verseKey);
+            quizPool.push(random);
+          }
         }
-      }
-      if (quizPool.length < 4) throw new Error("Could not prepare enough unique quiz choices.");
-      return json({ groups, quizPool });
-    });
+        if (quizPool.length < 4)
+          throw new Error("Could not prepare enough unique quiz choices.");
+        return json({ groups, quizPool });
+      },
+    );
   }
 
-  if (url.pathname === "/api/audio") return audioResponse(request, context, cache, fetchFn);
+  if (url.pathname === "/api/audio")
+    return audioResponse(request, context, cache, fetchFn);
   if (url.pathname === "/api/tafsir") {
-    return cachedJson(cache, versionedCacheRequest(request, TAFSIR_CACHE_VERSION), context, CATALOG_TTL_SECONDS, async () => {
-      const tafsirId = positiveQuery(url.searchParams.get("tafsir"), "Tafsir");
-      const verseKey = url.searchParams.get("verse") ?? "";
-      return json({ text: await api.tafsirForVerse(tafsirId, verseKey) });
-    });
+    return cachedJson(
+      cache,
+      versionedCacheRequest(request, TAFSIR_CACHE_VERSION),
+      context,
+      CATALOG_TTL_SECONDS,
+      async () => {
+        const tafsirId = positiveQuery(
+          url.searchParams.get("tafsir"),
+          "Tafsir",
+        );
+        const verseKey = url.searchParams.get("verse") ?? "";
+        return json({ text: await api.tafsirForVerse(tafsirId, verseKey) });
+      },
+    );
+  }
+  if (url.pathname === "/api/word-meaning") {
+    return cachedJson(
+      cache,
+      versionedCacheRequest(request, WORD_MEANING_CACHE_VERSION),
+      context,
+      CATALOG_TTL_SECONDS,
+      async () => {
+        const verseKey = url.searchParams.get("verse") ?? "";
+        const word = url.searchParams.get("word") ?? "";
+        return json(await api.arabicWordMeaning(verseKey, word));
+      },
+    );
   }
   return new Response("Not found", { status: 404 });
 }
@@ -201,7 +295,11 @@ export function createWorker(
   cacheFactory: () => Cache = defaultEdgeCache,
 ) {
   return {
-    async fetch(request: Request, environment: WorkerEnvironment, context: WorkerContext): Promise<Response> {
+    async fetch(
+      request: Request,
+      environment: WorkerEnvironment,
+      context: WorkerContext,
+    ): Promise<Response> {
       try {
         const url = new URL(request.url);
         return url.pathname.startsWith("/api/")

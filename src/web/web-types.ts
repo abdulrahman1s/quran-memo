@@ -19,6 +19,13 @@ export interface TafsirResource {
   languageName: string;
 }
 
+export interface ArabicWordMeaningPayload {
+  text: string;
+  matchedWord?: string;
+  sourceName: string;
+  sourceAuthor: string;
+}
+
 export interface Verse {
   verseKey: string;
   chapterId: number;
