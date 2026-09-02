@@ -14,6 +14,8 @@ import { ReadingView } from "../src/web/features/reading-view.tsx";
 import { SettingsView } from "../src/web/features/settings-view.tsx";
 import { PlayerMasthead } from "../src/web/features/player-masthead.tsx";
 import { QuizPanel } from "../src/web/features/quiz-panel.tsx";
+import { ReadingLibraryView } from "../src/web/features/reading-library-view.tsx";
+import { BookmarksView } from "../src/web/features/bookmarks-view.tsx";
 
 let dispose: (() => void) | undefined;
 afterEach(() => {
@@ -136,7 +138,7 @@ describe("Solid web components", () => {
       root,
     );
     const navigation = root.querySelector('[aria-label="Mobile navigation"]');
-    expect(navigation?.querySelectorAll("button")).toHaveLength(4);
+    expect(navigation?.querySelectorAll("button")).toHaveLength(5);
     expect(
       navigation?.querySelector('[aria-current="page"]')?.textContent,
     ).toContain("Mushaf");
@@ -144,6 +146,144 @@ describe("Solid web components", () => {
       .find((button) => button.textContent?.includes("Settings"))
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(selected).toBe("settings");
+  });
+
+  test("offers a searchable reading library, resume, and long-press bookmarks", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    let opened = "";
+    let bookmarked = 0;
+    dispose = render(
+      () => (
+        <ReadingLibraryView
+          tr={(key, values) => translate("en", key, values)}
+          language="en"
+          chapters={[
+            {
+              id: 1,
+              nameSimple: "Al-Fatihah",
+              nameArabic: "الفاتحة",
+              versesCount: 7,
+            },
+            {
+              id: 2,
+              nameSimple: "Al-Baqarah",
+              nameArabic: "البقرة",
+              versesCount: 286,
+            },
+          ]}
+          progress={{ chapterId: 2, pageNumber: 42 }}
+          catalogReady
+          catalogError={false}
+          bookmarkIds={new Set()}
+          retry={() => {}}
+          open={(chapterId, pageNumber) => {
+            opened = `${chapterId}:${pageNumber ?? "start"}`;
+          }}
+          toggleBookmark={(chapter) => {
+            bookmarked = chapter.id;
+          }}
+        />
+      ),
+      root,
+    );
+    expect(root.textContent).toContain("Continue reading");
+    expect(root.textContent).toContain("Mushaf page ٤٢");
+    [...root.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Continue reading"))
+      ?.click();
+    expect(opened).toBe("2:42");
+    const baqarah = [
+      ...root.querySelectorAll<HTMLButtonElement>(".reading-library-surah"),
+    ].find((button) => button.textContent?.includes("Al-Baqarah"));
+    baqarah?.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        clientX: 20,
+        clientY: 20,
+        pointerType: "touch",
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 540));
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Surah actions",
+    );
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Save Surah"))
+      ?.click();
+    expect(bookmarked).toBe(2);
+    const search = root.querySelector<HTMLInputElement>(
+      '[aria-label="Search by name or number…"]',
+    );
+    if (search) {
+      search.value = "Fatihah";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    expect(root.textContent).toContain("Al-Fatihah");
+    expect(root.textContent).not.toContain("286 ayahs");
+  });
+
+  test("groups bookmarks and opens or removes saved targets", () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    let opened = "";
+    let removed = "";
+    dispose = render(
+      () => (
+        <BookmarksView
+          tr={(key, values) => translate("en", key, values)}
+          language="en"
+          bookmarks={[
+            {
+              id: "surah:2",
+              type: "surah",
+              chapterId: 2,
+              chapterNameSimple: "Al-Baqarah",
+              chapterNameArabic: "البقرة",
+              createdAt: 2,
+            },
+            {
+              id: "ayah:2:255",
+              type: "ayah",
+              chapterId: 2,
+              chapterNameSimple: "Al-Baqarah",
+              chapterNameArabic: "البقرة",
+              pageNumber: 42,
+              verseKey: "2:255",
+              arabic: "الله لا إله إلا هو",
+              createdAt: 1,
+            },
+          ]}
+          open={(target) => {
+            opened = `${target.chapterId}:${target.pageNumber}:${target.verseKey}`;
+          }}
+          remove={(id) => {
+            removed = id;
+          }}
+        />
+      ),
+      root,
+    );
+    expect(root.textContent).toContain("Surahs");
+    expect(root.textContent).toContain("Ayahs");
+    const metadata = [
+      ...root.querySelectorAll<HTMLElement>("[data-bookmark-meta]"),
+    ].map((element) => element.textContent?.trim());
+    expect(metadata).toContain("Surah ٢");
+    expect(metadata).toContain("2:255");
+    expect(root.querySelector(".bookmark-ayah-excerpt")?.textContent).toContain(
+      "الله لا إله إلا هو",
+    );
+    const opens = root.querySelectorAll<HTMLButtonElement>(
+      '[aria-label="Open bookmark"]',
+    );
+    opens[1]?.click();
+    expect(opened).toBe("2:42:2:255");
+    const removes = root.querySelectorAll<HTMLButtonElement>(
+      '[aria-label="Remove bookmark"]',
+    );
+    removes[0]?.click();
+    expect(removed).toBe("surah:2");
   });
 
   test("uses a custom listbox instead of a device select", () => {
@@ -270,9 +410,12 @@ describe("Solid web components", () => {
     document.body.append(root);
     let playedWord = "";
     let inspectedWord = "";
+    let inspectedAyah = "";
     let soughtWord = "";
     let soughtAyah = "";
     let audioToggled = false;
+    let surahBookmarkToggled = false;
+    let pageBookmark = 0;
     const chapter = {
       id: 2,
       nameSimple: "Al-Baqarah",
@@ -336,6 +479,18 @@ describe("Solid web components", () => {
           }}
           inspectWord={(verse, position) => {
             inspectedWord = `${verse.verseKey}:${position}`;
+          }}
+          inspectAyah={(verse) => {
+            inspectedAyah = verse.verseKey;
+          }}
+          backToLibrary={() => {}}
+          pageChanged={() => {}}
+          bookmarkIds={new Set()}
+          toggleSurahBookmark={() => {
+            surahBookmarkToggled = true;
+          }}
+          togglePageBookmark={(pageNumber) => {
+            pageBookmark = pageNumber;
           }}
           seekWord={(verse, position) => {
             soughtWord = `${verse.verseKey}:${position}`;
@@ -438,6 +593,12 @@ describe("Solid web components", () => {
     expect(root.querySelector("[data-ayah-marker]")?.classList).not.toContain(
       "rounded-full",
     );
+    root.querySelector<HTMLButtonElement>("[data-ayah-marker]")?.click();
+    expect(inspectedAyah).toBe("2:1");
+    root.querySelector<HTMLButtonElement>('[aria-label="Save Surah"]')?.click();
+    expect(surahBookmarkToggled).toBe(true);
+    root.querySelector<HTMLButtonElement>('[aria-label="Save page"]')?.click();
+    expect(pageBookmark).toBe(2);
     const readingWord =
       root.querySelector<HTMLButtonElement>("button.mushaf-word");
     expect(readingWord?.getAttribute("aria-label")).toContain("الصفحة");
@@ -551,6 +712,12 @@ describe("Solid web components", () => {
           chapterName={(item) => item.nameSimple}
           playWord={() => {}}
           inspectWord={() => {}}
+          inspectAyah={() => {}}
+          backToLibrary={() => {}}
+          pageChanged={() => {}}
+          bookmarkIds={new Set()}
+          toggleSurahBookmark={() => {}}
+          togglePageBookmark={() => {}}
           seekWord={() => {}}
           seekAyah={() => {}}
           boxHighlight={false}
@@ -655,6 +822,96 @@ describe("Solid web components", () => {
     expect(retries).toBe(1);
     expect(root.textContent).toContain("No downloaded surahs");
     expect(root.textContent).toContain("Pick surahs above");
+  });
+
+  test("opens an ayah sheet with copy and bookmark actions", async () => {
+    history.replaceState(
+      null,
+      "",
+      "http://localhost/?view=reading&chapter=2&ayah=2:1",
+    );
+    const chapter = {
+      id: 2,
+      nameSimple: "Al-Baqarah",
+      nameArabic: "البقرة",
+      versesCount: 1,
+    };
+    globalThis.fetch = ((input: string | URL | Request) => {
+      const url = String(input);
+      const data = url.includes("/api/catalog")
+        ? {
+            chapters: [chapter],
+            reciters: [
+              {
+                id: 6,
+                nameEnglish: "Al-Husary",
+                nameArabic: "الحصري",
+                style: "Murattal",
+              },
+            ],
+            tafsirs: [
+              {
+                id: 1,
+                nameEnglish: "Tafsir",
+                nameArabic: "تفسير",
+                languageName: "english",
+              },
+            ],
+            defaultReciterId: 6,
+          }
+        : url.includes("/api/reading")
+          ? {
+              chapter,
+              verses: [
+                {
+                  verseKey: "2:1",
+                  arabic: "الم",
+                  pageNumber: 2,
+                  juzNumber: 1,
+                  hizbNumber: 1,
+                  audioUrl: "/audio/2_1.mp3",
+                  words: [{ position: 1, text: "الم" }],
+                  wordTimings: [],
+                },
+              ],
+            }
+          : { text: "Tafsir text" };
+      return Promise.resolve(
+        new Response(JSON.stringify(data), {
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    }) as unknown as typeof fetch;
+    let copied = "";
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          copied = value;
+        },
+      },
+    });
+    const root = document.createElement("div");
+    document.body.append(root);
+    dispose = render(() => <App />, root);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    root.querySelector<HTMLButtonElement>("[data-ayah-marker]")?.click();
+    const copy = [
+      ...document.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent?.includes("Copy ayah"));
+    expect(copy).not.toBeUndefined();
+    copy?.click();
+    await Promise.resolve();
+    expect(copied).toBe("الم");
+    const save = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Save ayah"]',
+    );
+    expect(save?.textContent).toContain("Save");
+    save?.click();
+    expect(save?.textContent).toContain("Saved");
+    expect(localStorage.getItem("quran-memo-bookmarks-v1")).toContain(
+      '"verseKey":"2:1"',
+    );
   });
 
   test("opens the Downloads tab", async () => {

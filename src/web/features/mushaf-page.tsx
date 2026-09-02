@@ -15,6 +15,8 @@ interface MushafTextProps {
   inspectWord?(verse: ReadingVerse, position: number): void;
   seekWord?(verse: ReadingVerse, position: number): void;
   seekAyah?(verse: ReadingVerse): void;
+  inspectAyah?(verse: ReadingVerse): void;
+  focusedVerse?: string;
 }
 
 function MushafWord(props: {
@@ -130,12 +132,17 @@ function MushafWord(props: {
   );
 }
 
-function AyahMarker(props: { number: number }) {
+function AyahMarker(props: { number: number; open?(): void }) {
   return (
-    <span
+    <button
+      type="button"
       class="mushaf-ayah-marker"
       data-ayah-marker
       aria-label={String(props.number)}
+      onClick={(event) => {
+        event.stopPropagation();
+        props.open?.();
+      }}
     >
       <svg
         class="mushaf-ayah-marker-frame"
@@ -150,7 +157,7 @@ function AyahMarker(props: { number: number }) {
       <span class="mushaf-ayah-number" aria-hidden="true">
         {quranNumber(props.number)}
       </span>
-    </span>
+    </button>
   );
 }
 
@@ -190,6 +197,10 @@ export function MushafText(props: MushafTextProps) {
           return (
             <span
               class="mushaf-verse"
+              classList={{
+                "bookmark-target": props.focusedVerse === verse.verseKey,
+              }}
+              data-verse-key={verse.verseKey}
               onDblClick={() => props.seekAyah?.(verse)}
             >
               <Show
@@ -220,7 +231,10 @@ export function MushafText(props: MushafTextProps) {
                 </For>
               </Show>
               {"\u00a0"}
-              <AyahMarker number={displayNumber()} />{" "}
+              <AyahMarker
+                number={displayNumber()}
+                open={() => props.inspectAyah?.(verse)}
+              />{" "}
             </span>
           );
         }}
@@ -243,6 +257,12 @@ interface MushafPageProps {
   inspectWord?(verse: ReadingVerse, position: number): void;
   seekWord?(verse: ReadingVerse, position: number): void;
   seekAyah?(verse: ReadingVerse): void;
+  inspectAyah?(verse: ReadingVerse): void;
+  focusedVerse?: string;
+  surahSaved: boolean;
+  pageSaved: boolean;
+  toggleSurah(): void;
+  togglePage(pageNumber: number): void;
 }
 
 export function MushafPage(props: MushafPageProps) {
@@ -287,9 +307,22 @@ export function MushafPage(props: MushafPageProps) {
             )}
           </Show>
         </div>
-        <h2 class="mt-1 font-arabic text-[clamp(24px,3vw,34px)] leading-normal font-semibold text-ink">
-          {props.payload.chapter.nameArabic}
-        </h2>
+        <div class="mx-auto mt-1 flex max-w-[420px] items-center justify-center gap-2">
+          <h2 class="font-arabic text-[clamp(24px,3vw,34px)] leading-normal font-semibold text-ink">
+            {props.payload.chapter.nameArabic}
+          </h2>
+          <button
+            type="button"
+            class={`grid size-10 shrink-0 place-items-center rounded-full border transition active:scale-95 ${props.surahSaved ? "border-gold/45 bg-gold/12 text-gold" : "border-white/10 text-muted hover:border-gold/30 hover:text-gold"}`}
+            aria-label={props.tr(
+              props.surahSaved ? "removeSavedSurah" : "saveSurah",
+            )}
+            aria-pressed={props.surahSaved}
+            onClick={props.toggleSurah}
+          >
+            <Icon name="bookmark" class="size-4" />
+          </button>
+        </div>
         <div class="mx-auto mt-4 flex w-20 items-center gap-2 text-gold/55">
           <span class="h-px flex-1 bg-current" />
           <span class="size-1.5 rotate-45 bg-current" />
@@ -311,6 +344,8 @@ export function MushafPage(props: MushafPageProps) {
           inspectWord={props.inspectWord}
           seekWord={props.seekWord}
           seekAyah={props.seekAyah}
+          inspectAyah={props.inspectAyah}
+          focusedVerse={props.focusedVerse}
         />
       </div>
 
@@ -327,9 +362,28 @@ export function MushafPage(props: MushafPageProps) {
         >
           <Icon name="left" class="size-4" />
         </button>
-        <span class="font-mono text-[0.8125rem] tracking-[.1em] text-muted max-sm:text-sm">
-          {quranNumber(props.pageIndex + 1)} / {quranNumber(props.pageCount)}
-        </span>
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-[0.75rem] text-muted max-sm:text-xs">
+            {props.tr("mushafPage", {
+              page: quranNumber(pageMetadata()?.pageNumber ?? 1),
+            })}
+            <span class="ms-1 opacity-60">
+              · {quranNumber(props.pageIndex + 1)} /{" "}
+              {quranNumber(props.pageCount)}
+            </span>
+          </span>
+          <button
+            type="button"
+            class={`grid size-10 shrink-0 place-items-center rounded-full border transition active:scale-95 ${props.pageSaved ? "border-gold/45 bg-gold/12 text-gold" : "border-white/10 text-muted hover:border-gold/30 hover:text-gold"}`}
+            aria-label={props.tr(
+              props.pageSaved ? "removeSavedPage" : "savePage",
+            )}
+            aria-pressed={props.pageSaved}
+            onClick={() => props.togglePage(pageMetadata()?.pageNumber ?? 1)}
+          >
+            <Icon name="bookmark" class="size-4" />
+          </button>
+        </div>
         <button
           type="button"
           class="reading-page-button justify-self-end"

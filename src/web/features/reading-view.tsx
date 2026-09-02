@@ -1,4 +1,10 @@
-import { Show, createEffect, createMemo, createSignal } from "solid-js";
+import {
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from "solid-js";
 import {
   CustomSelect,
   Icon,
@@ -14,6 +20,7 @@ import {
   readingPageIndexForVerse,
 } from "../reading.ts";
 import type { Chapter, ReadingPayload, Reciter } from "../web-types.ts";
+import type { ReadingTarget } from "../navigation.ts";
 import { Basmala, MushafPage, MushafText } from "./mushaf-page.tsx";
 
 interface ReadingViewProps {
@@ -36,6 +43,13 @@ interface ReadingViewProps {
   inspectWord(verse: ReadingPayload["verses"][number], position: number): void;
   seekWord(verse: ReadingPayload["verses"][number], position: number): void;
   seekAyah(verse: ReadingPayload["verses"][number]): void;
+  inspectAyah(verse: ReadingPayload["verses"][number]): void;
+  target?: ReadingTarget;
+  backToLibrary(): void;
+  pageChanged(pageNumber: number, preserveTarget?: boolean): void;
+  bookmarkIds: Set<string>;
+  toggleSurahBookmark(): void;
+  togglePageBookmark(pageNumber: number): void;
   audioVisible: boolean;
   audioPlaying: boolean;
   audioAyah: number;
@@ -114,6 +128,8 @@ export function ReadingView(props: ReadingViewProps) {
   const [pageIndex, setPageIndex] = createSignal(0);
   const [continuous, setContinuous] = createSignal(false);
   const [mobilePlayerExpanded, setMobilePlayerExpanded] = createSignal(false);
+  const [focusedVerse, setFocusedVerse] = createSignal<string>();
+  let focusTimer: number | undefined;
   const pages = createMemo(() =>
     groupReadingPages(props.payload?.verses ?? []),
   );
@@ -134,11 +150,34 @@ export function ReadingView(props: ReadingViewProps) {
   const activeControl = "border-gold/45! bg-gold/10! text-gold-bright!";
 
   createEffect(() => {
-    props.chapterId;
-    setPageIndex(0);
+    const chapterId = props.chapterId;
+    const available = pages();
+    if (!available.length) return;
+    const targetVerse = props.target?.verseKey;
+    const targetPage = props.target?.pageNumber;
+    const next = targetVerse
+      ? readingPageIndexForVerse(available, targetVerse)
+      : available.findIndex((item) => item.pageNumber === targetPage);
+    const resolved = next >= 0 ? next : 0;
+    setPageIndex(resolved);
+    props.pageChanged(available[resolved]!.pageNumber, true);
     setContinuous(false);
     setMobilePlayerExpanded(false);
+    if (targetVerse && targetVerse.startsWith(`${chapterId}:`)) {
+      setFocusedVerse(targetVerse);
+      clearTimeout(focusTimer);
+      focusTimer = window.setTimeout(() => setFocusedVerse(), 1800);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          reader
+            ?.querySelector<HTMLElement>(`[data-verse-key="${targetVerse}"]`)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+        ),
+      );
+    }
   });
+
+  onCleanup(() => clearTimeout(focusTimer));
 
   createEffect(() => {
     if (!props.audioVisible) setMobilePlayerExpanded(false);
@@ -152,6 +191,7 @@ export function ReadingView(props: ReadingViewProps) {
     if (nextPage < 0 || (!continuous() && nextPage === pageIndex())) return;
     setContinuous(false);
     setPageIndex(nextPage);
+    props.pageChanged(pages()[nextPage]!.pageNumber);
     requestAnimationFrame(() =>
       reader?.scrollIntoView({ behavior: "smooth", block: "start" }),
     );
@@ -176,7 +216,10 @@ export function ReadingView(props: ReadingViewProps) {
   });
 
   function goToPage(next: number): void {
-    setPageIndex(Math.min(pages().length - 1, Math.max(0, next)));
+    const resolved = Math.min(pages().length - 1, Math.max(0, next));
+    setPageIndex(resolved);
+    const pageNumber = pages()[resolved]?.pageNumber;
+    if (pageNumber) props.pageChanged(pageNumber);
     reader?.focus({ preventScroll: true });
   }
 
@@ -200,7 +243,10 @@ export function ReadingView(props: ReadingViewProps) {
   function turnPage(next: number): void {
     props.pauseScroll();
     setContinuous(false);
-    setPageIndex(Math.min(pages().length - 1, Math.max(0, next)));
+    const resolved = Math.min(pages().length - 1, Math.max(0, next));
+    setPageIndex(resolved);
+    const pageNumber = pages()[resolved]?.pageNumber;
+    if (pageNumber) props.pageChanged(pageNumber);
     requestAnimationFrame(() =>
       reader?.scrollIntoView({ behavior: "smooth", block: "start" }),
     );
@@ -281,6 +327,14 @@ export function ReadingView(props: ReadingViewProps) {
       class={`mx-auto w-[min(1040px,100%)] animate-enter py-10 max-md:pt-7 ${props.audioVisible ? (mobilePlayerExpanded() ? "max-md:pb-[250px]" : "max-md:pb-[150px]") : "max-md:pb-[175px]"}`}
     >
       <div class="grid gap-5">
+        <button
+          type="button"
+          class="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl px-3 text-xs font-bold text-muted transition hover:bg-white/5 hover:text-gold"
+          onClick={props.backToLibrary}
+        >
+          <Icon name="left" class="size-4 rtl:rotate-180" />
+          {props.tr("backToSurahs")}
+        </button>
         <div
           data-reading-toolbar
           class="sticky top-3 z-20 rounded-2xl border border-white/10 bg-[rgba(14,25,21,.97)] p-2.5 shadow-[0_14px_40px_rgba(0,0,0,.3)] backdrop-blur-xl max-md:fixed max-md:inset-x-3 max-md:top-auto max-md:bottom-[calc(var(--bottom-nav-h)+12px)] max-md:z-[55] max-md:rounded-[16px] max-md:p-1"
@@ -390,9 +444,26 @@ export function ReadingView(props: ReadingViewProps) {
                     >
                       {payload().chapter.nameSimple}
                     </p>
-                    <h2 class="mt-1 font-arabic text-[clamp(28px,4vw,42px)] leading-normal font-semibold">
-                      {payload().chapter.nameArabic}
-                    </h2>
+                    <div class="mt-1 flex items-center justify-center gap-2">
+                      <h2 class="font-arabic text-[clamp(28px,4vw,42px)] leading-normal font-semibold">
+                        {payload().chapter.nameArabic}
+                      </h2>
+                      <button
+                        type="button"
+                        class={`grid size-10 shrink-0 place-items-center rounded-full border transition ${props.bookmarkIds.has(`surah:${props.chapterId}`) ? "border-gold/45 bg-gold/12 text-gold" : "border-white/10 text-muted"}`}
+                        aria-label={props.tr(
+                          props.bookmarkIds.has(`surah:${props.chapterId}`)
+                            ? "removeSavedSurah"
+                            : "saveSurah",
+                        )}
+                        aria-pressed={props.bookmarkIds.has(
+                          `surah:${props.chapterId}`,
+                        )}
+                        onClick={props.toggleSurahBookmark}
+                      >
+                        <Icon name="bookmark" class="size-4" />
+                      </button>
+                    </div>
                     <Show when={payload().verses[0]}>
                       {(verse) => (
                         <p class="mt-2 text-[0.6875rem] text-muted" dir="auto">
@@ -428,6 +499,8 @@ export function ReadingView(props: ReadingViewProps) {
                     inspectWord={props.inspectWord}
                     seekWord={props.seekWord}
                     seekAyah={props.seekAyah}
+                    inspectAyah={props.inspectAyah}
+                    focusedVerse={focusedVerse()}
                   />
                 </article>
               }
@@ -446,6 +519,12 @@ export function ReadingView(props: ReadingViewProps) {
                 inspectWord={props.inspectWord}
                 seekWord={props.seekWord}
                 seekAyah={props.seekAyah}
+                inspectAyah={props.inspectAyah}
+                focusedVerse={focusedVerse()}
+                surahSaved={props.bookmarkIds.has(`surah:${props.chapterId}`)}
+                pageSaved={props.bookmarkIds.has(`page:${page()?.pageNumber}`)}
+                toggleSurah={props.toggleSurahBookmark}
+                togglePage={props.togglePageBookmark}
               />
             </Show>
           )}

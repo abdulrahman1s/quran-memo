@@ -136,6 +136,18 @@ select:focus-visible {
     color 140ms ease,
     text-shadow 140ms ease;
 }
+.reading-library-surah {
+  touch-action: pan-y pinch-zoom;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.bookmark-ayah-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 .mushaf-word:focus-visible,
 .mushaf-word.active {
   color: #efd28f;
@@ -172,11 +184,24 @@ select:focus-visible {
   width: 0.92em;
   height: 0.92em;
   margin-inline: 0.04em;
+  padding: 0;
   place-items: center;
+  border: 0;
+  background: transparent;
   color: var(--color-gold);
+  cursor: pointer;
   line-height: 1;
   white-space: nowrap;
   vertical-align: -0.18em;
+}
+.mushaf-verse.bookmark-target {
+  border-radius: 0.18em;
+  background: color-mix(in srgb, var(--color-gold) 15%, transparent);
+  box-shadow: 0 0 0 0.12em
+    color-mix(in srgb, var(--color-gold) 18%, transparent);
+  transition:
+    background 220ms ease,
+    box-shadow 220ms ease;
 }
 .mushaf-ayah-marker-frame {
   display: block;

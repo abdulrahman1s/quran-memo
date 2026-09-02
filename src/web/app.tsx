@@ -31,10 +31,12 @@ import {
 import {
   mainTabFromUrl,
   readingChapterFromUrl,
+  readingTargetFromUrl,
   shouldRenderPlayer,
   urlForMainTab,
-  urlForReadingChapter,
+  urlForReadingTarget,
   type MainTab,
+  type ReadingTarget,
 } from "./navigation.ts";
 import { translate, type Language, type MessageKey } from "./i18n.ts";
 import type {
@@ -69,10 +71,20 @@ import {
   type ReaderPreferences as Preferences,
 } from "./features/settings-view.tsx";
 import { ReadingView } from "./features/reading-view.tsx";
+import { ReadingLibraryView } from "./features/reading-library-view.tsx";
+import { BookmarksView } from "./features/bookmarks-view.tsx";
 import { PracticeView as PracticeFeatureView } from "./features/practice-view.tsx";
 import { prioritizeTajweedRules, tajweedRuleCopy } from "./tajweed.ts";
 import { PlayerMasthead } from "./features/player-masthead.tsx";
 import { QuizPanel } from "./features/quiz-panel.tsx";
+import {
+  BOOKMARKS_KEY,
+  READING_PROGRESS_KEY,
+  parseBookmarks,
+  parseReadingProgress,
+  toggleBookmark,
+  type Bookmark,
+} from "./bookmarks.ts";
 
 const LANGUAGE_KEY = "quran-memo-language-override-v1";
 const READER_KEY = "quran-memo-reader-preferences-v1";
@@ -177,12 +189,27 @@ export function App() {
   let toastTimer: number | undefined;
   let toastExitTimer: number | undefined;
 
+  const initialReadingTarget = readingTargetFromUrl(new URL(location.href));
   const storedReading = Number(localStorage.getItem(READING_KEY));
-  const [readingChapter, setReadingChapter] = createSignal(
-    readingChapterFromUrl(
-      new URL(location.href),
-      storedReading >= 1 && storedReading <= 114 ? storedReading : 1,
+  const [readingProgress, setReadingProgress] = createSignal(
+    parseReadingProgress(
+      localStorage.getItem(READING_PROGRESS_KEY),
+      storedReading,
     ),
+  );
+  const [readingTarget, setReadingTarget] = createSignal<
+    ReadingTarget | undefined
+  >(initialReadingTarget);
+  const [readingLibrary, setReadingLibrary] = createSignal(
+    tab() === "reading" && !initialReadingTarget,
+  );
+  const [readingChapter, setReadingChapter] = createSignal(
+    initialReadingTarget?.chapterId ??
+      readingProgress()?.chapterId ??
+      readingChapterFromUrl(new URL(location.href), 1),
+  );
+  const [bookmarks, setBookmarks] = createSignal(
+    parseBookmarks(localStorage.getItem(BOOKMARKS_KEY)),
   );
   const [reading, setReading] = createSignal<ReadingPayload>();
   const [readingLoading, setReadingLoading] = createSignal(false);
@@ -413,6 +440,74 @@ export function App() {
     );
   }
 
+  function saveReadingProgress(chapterId: number, pageNumber?: number): void {
+    const next = { chapterId, pageNumber };
+    setReadingProgress(next);
+    localStorage.setItem(READING_PROGRESS_KEY, JSON.stringify(next));
+    localStorage.setItem(READING_KEY, String(chapterId));
+  }
+
+  function commitBookmark(bookmark: Bookmark): void {
+    const result = toggleBookmark(bookmarks(), bookmark);
+    setBookmarks(result.bookmarks);
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(result.bookmarks));
+    notify(tr(result.saved ? "bookmarkSaved" : "bookmarkRemoved"));
+  }
+
+  function bookmarkBase(chapter: Chapter) {
+    return {
+      chapterId: chapter.id,
+      chapterNameSimple: chapter.nameSimple,
+      chapterNameArabic: chapter.nameArabic,
+      createdAt: Date.now(),
+    };
+  }
+
+  function toggleSurahBookmark(): void {
+    const chapter = reading()?.chapter;
+    if (!chapter) return;
+    toggleChapterBookmark(chapter);
+  }
+
+  function toggleChapterBookmark(chapter: Chapter): void {
+    commitBookmark({
+      ...bookmarkBase(chapter),
+      type: "surah",
+      id: `surah:${chapter.id}`,
+    });
+  }
+
+  function togglePageBookmark(pageNumber: number): void {
+    const chapter = reading()?.chapter;
+    if (!chapter) return;
+    commitBookmark({
+      ...bookmarkBase(chapter),
+      type: "page",
+      pageNumber,
+      id: `page:${pageNumber}`,
+    });
+  }
+
+  function toggleAyahBookmark(verse: ReadingPayload["verses"][number]): void {
+    const chapter = reading()?.chapter;
+    if (!chapter) return;
+    commitBookmark({
+      ...bookmarkBase(chapter),
+      type: "ayah",
+      verseKey: verse.verseKey,
+      pageNumber: verse.pageNumber,
+      arabic: verse.arabic,
+      id: `ayah:${verse.verseKey}`,
+    });
+  }
+
+  function removeBookmark(id: string): void {
+    const next = bookmarks().filter((item) => item.id !== id);
+    setBookmarks(next);
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(next));
+    notify(tr("bookmarkRemoved"));
+  }
+
   async function requestSession(
     ids: number[],
     selectedReciter: number,
@@ -470,27 +565,78 @@ export function App() {
     stopMushafAudio(true, true);
     pauseAutoScroll();
     setTab(next);
+    if (next === "reading") {
+      setReadingLibrary(true);
+      setReadingTarget();
+    }
     if (historyMode !== "none")
       history[`${historyMode}State`](
         null,
         "",
-        next === "reading"
-          ? urlForReadingChapter(location.href, readingChapter())
-          : urlForMainTab(location.href, next),
+        urlForMainTab(location.href, next),
       );
-    if (next === "reading") void loadReading(readingChapter(), false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function openReadingTarget(
+    target: ReadingTarget,
+    historyMode: "push" | "replace" = "push",
+  ): void {
+    stopPlayback();
+    stopReadingWord(true);
+    stopMushafAudio(true, true);
+    pauseAutoScroll();
+    setTab("reading");
+    setReadingLibrary(false);
+    setReadingTarget(target);
+    history[`${historyMode}State`](
+      null,
+      "",
+      urlForReadingTarget(location.href, target),
+    );
+    void loadReading(target.chapterId, false, target);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function showReadingLibrary(): void {
+    stopReadingWord(true);
+    stopMushafAudio(true, true);
+    pauseAutoScroll();
+    setReadingLibrary(true);
+    setReadingTarget();
+    history.pushState(null, "", urlForMainTab(location.href, "reading"));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function readingPageChanged(
+    pageNumber: number,
+    preserveTarget = false,
+  ): void {
+    saveReadingProgress(readingChapter(), pageNumber);
+    const current = readingTarget();
+    const target: ReadingTarget = {
+      chapterId: readingChapter(),
+      pageNumber,
+      verseKey: preserveTarget ? current?.verseKey : undefined,
+    };
+    if (!preserveTarget) setReadingTarget(target);
+    history.replaceState(null, "", urlForReadingTarget(location.href, target));
   }
   async function loadReading(
     chapterId: number,
     updateUrl = true,
+    target?: ReadingTarget,
   ): Promise<void> {
     const chapter = chapters().find((item) => item.id === chapterId);
     if (!chapter) return;
     const request = ++readingRequest;
     const requestedReciter = reciterId();
+    const resolvedTarget =
+      target ??
+      (readingTarget()?.chapterId === chapterId
+        ? readingTarget()!
+        : { chapterId });
     setReadingChapter(chapterId);
-    localStorage.setItem(READING_KEY, String(chapterId));
+    setReadingTarget(resolvedTarget);
+    setReadingLibrary(false);
+    saveReadingProgress(chapterId, resolvedTarget.pageNumber);
     setReadingLoading(true);
     setReadingError(false);
     pauseAutoScroll();
@@ -502,7 +648,7 @@ export function App() {
       history.replaceState(
         null,
         "",
-        urlForReadingChapter(location.href, chapterId),
+        urlForReadingTarget(location.href, resolvedTarget),
       );
     try {
       const payload = await getJson<ReadingPayload>(
@@ -707,6 +853,32 @@ export function App() {
     setReadingInsight({ word, verseKey: verse.verseKey });
     if (language() === "ar")
       void loadReadingInsightWordMeaning(verse.verseKey, word.text);
+  }
+
+  function inspectReadingAyah(verse: ReadingPayload["verses"][number]): void {
+    const word = verse.words[0];
+    if (!word) return;
+    readingInsightRequest += 1;
+    readingInsightWordRequest += 1;
+    setReadingInsight({ word, verseKey: verse.verseKey });
+    setReadingInsightScope("ayah");
+    setReadingInsightAyahExpanded(false);
+    setReadingInsightAyahTruncated(false);
+    setReadingInsightWordMeaning();
+    setReadingInsightWordLoading(false);
+    setReadingInsightTafsir("");
+    void loadReadingInsightTafsir(verse.verseKey);
+  }
+
+  async function copyReadingInsightAyah(): Promise<void> {
+    const verse = readingInsightVerse();
+    if (!verse) return;
+    try {
+      await navigator.clipboard.writeText(verse.arabic);
+      notify(tr("ayahCopied"));
+    } catch {
+      notify(tr("copyFailed"), true);
+    }
   }
 
   function toggleReadingInsightAudio(): void {
@@ -1608,7 +1780,12 @@ export function App() {
         setOfflineReciter(shared.reciterId ?? value.defaultReciterId);
         const preferred = preferredTafsir(language(), value.tafsirs ?? []);
         if (preferred) setTafsirId(preferred.id);
-        if (tab() === "reading") void loadReading(readingChapter(), false);
+        if (tab() === "reading" && !readingLibrary())
+          void loadReading(
+            readingChapter(),
+            false,
+            readingTarget() ?? { chapterId: readingChapter() },
+          );
         void refreshCacheSize();
       })
       .catch(() => setCatalogError(true));
@@ -1618,16 +1795,16 @@ export function App() {
     loadCatalog();
     const popstate = () => {
       const next = mainTabFromUrl(new URL(location.href));
+      const target = readingTargetFromUrl(new URL(location.href));
       stopPlayback();
       stopReadingWord(true);
       stopMushafAudio(true, true);
       pauseAutoScroll();
       setTab(next);
-      if (next === "reading")
-        void loadReading(
-          readingChapterFromUrl(new URL(location.href), readingChapter()),
-          false,
-        );
+      setReadingLibrary(next === "reading" && !target);
+      setReadingTarget(target);
+      if (next === "reading" && target)
+        void loadReading(target.chapterId, false, target);
     };
     const stopScroll = (event: Event) => {
       const target = event.target;
@@ -1698,6 +1875,9 @@ export function App() {
         sum + (offlineManifest()[offlineKey(id, offlineReciter())]?.bytes ?? 0),
       0,
     ),
+  );
+  const bookmarkIds = createMemo(
+    () => new Set(bookmarks().map((item) => item.id)),
   );
 
   const Hero = (props: {
@@ -1786,45 +1966,83 @@ export function App() {
                   />
                 </Show>
                 <Show when={tab() === "reading"}>
-                  <ReadingView
+                  <Show
+                    when={!readingLibrary()}
+                    fallback={
+                      <ReadingLibraryView
+                        tr={tr}
+                        language={language()}
+                        chapters={chapters()}
+                        progress={readingProgress()}
+                        catalogReady={Boolean(catalog())}
+                        catalogError={catalogError()}
+                        bookmarkIds={bookmarkIds()}
+                        retry={loadCatalog}
+                        open={(chapterId, pageNumber) =>
+                          openReadingTarget({ chapterId, pageNumber })
+                        }
+                        toggleBookmark={toggleChapterBookmark}
+                      />
+                    }
+                  >
+                    <ReadingView
+                      tr={tr}
+                      language={language()}
+                      chapters={chapters()}
+                      chapterId={readingChapter()}
+                      payload={reading()}
+                      loading={readingLoading()}
+                      error={readingError()}
+                      scrolling={autoScroll()}
+                      scrollComplete={autoScrollDone()}
+                      load={(chapter) => void loadReading(chapter)}
+                      target={readingTarget()}
+                      backToLibrary={showReadingLibrary}
+                      pageChanged={readingPageChanged}
+                      bookmarkIds={bookmarkIds()}
+                      toggleSurahBookmark={toggleSurahBookmark}
+                      togglePageBookmark={togglePageBookmark}
+                      startScroll={startAutoScroll}
+                      pauseScroll={pauseAutoScroll}
+                      chapterName={chapterName}
+                      activeWord={readingWord() ?? mushafHighlightedWord()}
+                      boxHighlight={preferences().wordHighlightStyle === "box"}
+                      playWord={(verse, position) =>
+                        void playReadingWord(verse, position)
+                      }
+                      inspectWord={inspectReadingWord}
+                      inspectAyah={inspectReadingAyah}
+                      seekWord={(verse, position) =>
+                        void seekMushafAudio(verse, position)
+                      }
+                      seekAyah={(verse) => void seekMushafAudio(verse)}
+                      audioVisible={mushafAudioVisible()}
+                      audioPlaying={mushafPlaybackRequested()}
+                      audioAyah={mushafAyah()}
+                      audioTime={mushafTime()}
+                      audioDuration={mushafDuration()}
+                      reciterName={
+                        activeReciter() ? reciterName(activeReciter()!) : ""
+                      }
+                      reciterId={reciterId()}
+                      reciters={reciters()}
+                      changeReciter={(value) => void changeMushafReciter(value)}
+                      toggleAudio={toggleMushafAudio}
+                      previousAudio={() =>
+                        void playMushafAyah(mushafAyah() - 1)
+                      }
+                      nextAudio={() => void playMushafAyah(mushafAyah() + 1)}
+                      closeAudio={() => stopMushafAudio(true, true)}
+                    />
+                  </Show>
+                </Show>
+                <Show when={tab() === "bookmarks"}>
+                  <BookmarksView
                     tr={tr}
                     language={language()}
-                    chapters={chapters()}
-                    chapterId={readingChapter()}
-                    payload={reading()}
-                    loading={readingLoading()}
-                    error={readingError()}
-                    scrolling={autoScroll()}
-                    scrollComplete={autoScrollDone()}
-                    load={(chapter) => void loadReading(chapter)}
-                    startScroll={startAutoScroll}
-                    pauseScroll={pauseAutoScroll}
-                    chapterName={chapterName}
-                    activeWord={readingWord() ?? mushafHighlightedWord()}
-                    boxHighlight={preferences().wordHighlightStyle === "box"}
-                    playWord={(verse, position) =>
-                      void playReadingWord(verse, position)
-                    }
-                    inspectWord={inspectReadingWord}
-                    seekWord={(verse, position) =>
-                      void seekMushafAudio(verse, position)
-                    }
-                    seekAyah={(verse) => void seekMushafAudio(verse)}
-                    audioVisible={mushafAudioVisible()}
-                    audioPlaying={mushafPlaybackRequested()}
-                    audioAyah={mushafAyah()}
-                    audioTime={mushafTime()}
-                    audioDuration={mushafDuration()}
-                    reciterName={
-                      activeReciter() ? reciterName(activeReciter()!) : ""
-                    }
-                    reciterId={reciterId()}
-                    reciters={reciters()}
-                    changeReciter={(value) => void changeMushafReciter(value)}
-                    toggleAudio={toggleMushafAudio}
-                    previousAudio={() => void playMushafAyah(mushafAyah() - 1)}
-                    nextAudio={() => void playMushafAyah(mushafAyah() + 1)}
-                    closeAudio={() => stopMushafAudio(true, true)}
+                    bookmarks={bookmarks()}
+                    open={openReadingTarget}
+                    remove={removeBookmark}
                   />
                 </Show>
                 <Show when={tab() === "downloads"}>
@@ -1875,8 +2093,8 @@ export function App() {
               onClick={(event) => event.stopPropagation()}
             >
               <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-ink/15 md:hidden" />
-              <header class="flex items-start justify-between gap-4 border-b border-hairline pb-4">
-                <div>
+              <header class="flex items-start justify-between gap-4 border-b border-hairline pb-4 max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
+                <div class="min-w-0">
                   <span class="text-[0.625rem] font-bold tracking-wider text-gold uppercase">
                     {tr("wordMeaning")}
                   </span>
@@ -1884,7 +2102,7 @@ export function App() {
                     {insight().word.text}
                   </strong>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex shrink-0 items-center gap-2 max-sm:justify-end max-sm:gap-1">
                   <button
                     type="button"
                     class={`inline-flex min-h-11 items-center gap-2 rounded-full border px-3 text-[0.6875rem] font-bold transition active:scale-[.98] ${
@@ -1917,6 +2135,31 @@ export function App() {
                           `${insight().verseKey}:${insight().word.position}`
                           ? "pause"
                           : "listen",
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    class={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 text-[0.6875rem] font-bold transition active:scale-[.96] ${bookmarkIds().has(`ayah:${insight().verseKey}`) ? "border-gold/45 bg-gold/12 text-gold" : "border-white/12 text-[#cbd5cf] hover:border-gold/35 hover:text-gold"}`}
+                    aria-label={tr(
+                      bookmarkIds().has(`ayah:${insight().verseKey}`)
+                        ? "removeSavedAyah"
+                        : "saveAyah",
+                    )}
+                    aria-pressed={bookmarkIds().has(
+                      `ayah:${insight().verseKey}`,
+                    )}
+                    onClick={() => {
+                      const verse = readingInsightVerse();
+                      if (verse) toggleAyahBookmark(verse);
+                    }}
+                  >
+                    <Icon name="bookmark" class="size-4" />
+                    <span>
+                      {tr(
+                        bookmarkIds().has(`ayah:${insight().verseKey}`)
+                          ? "savedBookmark"
+                          : "saveBookmarkAction",
                       )}
                     </span>
                   </button>
@@ -1964,6 +2207,14 @@ export function App() {
                     {tr("fullAyahScope")}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  class={`${styles.button} mt-3 w-full`}
+                  onClick={() => void copyReadingInsightAyah()}
+                >
+                  <Icon name="copy" class="size-4" />
+                  {tr("copyAyah")}
+                </button>
                 <Show
                   when={readingInsightScope() === "ayah"}
                   fallback={
@@ -2077,8 +2328,7 @@ export function App() {
                       ref={(element) =>
                         requestAnimationFrame(() =>
                           setReadingInsightAyahTruncated(
-                            element.scrollHeight > element.clientHeight + 1 ||
-                              (readingInsightVerse()?.arabic.length ?? 0) > 90,
+                            element.scrollHeight > element.clientHeight + 1,
                           ),
                         )
                       }

@@ -38,6 +38,7 @@ export function Icon(props: { name: string; class?: string }): JSX.Element {
     book: (
       <path d="M3 5.5A4.5 4.5 0 0 1 7.5 4H12v16H7.5A4.5 4.5 0 0 0 3 21.5Zm18 0A4.5 4.5 0 0 0 16.5 4H12v16h4.5a4.5 4.5 0 0 1 4.5 1.5Z" />
     ),
+    bookmark: <path d="M6 3h12v18l-6-4-6 4Z" />,
     search: (
       <>
         <circle cx="11" cy="11" r="7" />
@@ -48,6 +49,12 @@ export function Icon(props: { name: string; class?: string }): JSX.Element {
     left: <path d="m15 18-6-6 6-6" />,
     right: <path d="m9 18 6-6-6-6" />,
     share: <path d="M14 5h5v5M19 5l-9 9M18 13v6H5V6h6" />,
+    copy: (
+      <>
+        <rect x="8" y="8" width="11" height="11" rx="2" />
+        <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+      </>
+    ),
     trash: <path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" />,
     reset: <path d="M4 7v5h5M5.6 16A8 8 0 1 0 4 12" />,
     help: (
@@ -92,6 +99,7 @@ export interface SelectOption {
 const mainTabs: Array<[MainTab, string, MessageKey]> = [
   ["practice", "play", "practiceTab"],
   ["reading", "book", "readingTab"],
+  ["bookmarks", "bookmark", "bookmarksTab"],
   ["downloads", "download", "downloadsTab"],
   ["settings", "settings", "settingsTab"],
 ];
@@ -314,7 +322,7 @@ export function MobileNavigation(props: {
       aria-label="Mobile navigation"
       class="fixed inset-x-0 bottom-0 z-[60] hidden border-t border-white/10 bg-[#0e1915]/95 px-2 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-16px_45px_rgba(0,0,0,.32)] backdrop-blur-xl max-md:block"
     >
-      <div class="mx-auto grid max-w-[520px] grid-cols-4 gap-1">
+      <div class="mx-auto grid max-w-[560px] grid-cols-5 gap-1">
         <For each={mainTabs}>
           {(item) => (
             <button
