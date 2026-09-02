@@ -125,12 +125,12 @@ export function Basmala(props: { tr: Translator }) {
         <img
           src="/besmllah.svg"
           alt="بسم الله الرحمن الرحيم"
-          class="h-auto w-[min(260px,72vw)] brightness-0 invert"
+          class="basmala-mark h-auto w-[min(260px,72vw)]"
           width="220"
           height="45"
         />
       </div>
-      <p class="mt-2 text-[13px] leading-6 text-muted" dir="auto">
+      <p class="mt-2 text-[0.8125rem] leading-6 text-muted" dir="auto">
         {props.tr("basmalaMeaning")}
       </p>
     </div>
@@ -143,7 +143,7 @@ export function MushafText(props: MushafTextProps) {
     `${verseKey}:${position}`;
 
   return (
-    <div class="arabic-reader mushaf-text text-[#f7f3e9]">
+    <div class="arabic-reader mushaf-text text-ink">
       <For each={props.verses}>
         {(verse) => {
           const displayNumber = () =>
@@ -161,7 +161,7 @@ export function MushafText(props: MushafTextProps) {
                 fallback={<>{verse.arabic.trim()}</>}
               >
                 <For each={verse.words}>
-                  {(word) => (
+                  {(word, index) => (
                     <>
                       <MushafWord
                         tr={props.tr}
@@ -177,11 +177,13 @@ export function MushafText(props: MushafTextProps) {
                           props.inspectWord?.(verse, word.position)
                         }
                         seek={() => props.seekWord?.(verse, word.position)}
-                      />{" "}
+                      />
+                      {index() < verse.words.length - 1 ? " " : ""}
                     </>
                   )}
                 </For>
-              </Show>{" "}
+              </Show>
+              {"\u00a0"}
               <AyahMarker number={displayNumber()} />{" "}
             </span>
           );
@@ -234,7 +236,7 @@ export function MushafPage(props: MushafPageProps) {
       translate="no"
     >
       <header class="px-6 pt-7 text-center max-sm:pt-5">
-        <div class="flex items-center justify-between gap-4 text-[11px] text-muted">
+        <div class="flex items-center justify-between gap-4 text-[0.6875rem] text-muted">
           <p class="font-serif tracking-[.08em] text-gold" dir="ltr">
             {props.payload.chapter.nameSimple}
           </p>
@@ -277,7 +279,7 @@ export function MushafPage(props: MushafPageProps) {
       </div>
 
       <footer
-        class="grid grid-cols-[1fr_auto_1fr] items-center border-t border-white/[.07] px-5 py-4"
+        class="grid grid-cols-[1fr_auto_1fr] items-center border-t border-hairline px-5 py-4"
         dir="ltr"
       >
         <button
@@ -289,7 +291,7 @@ export function MushafPage(props: MushafPageProps) {
         >
           <Icon name="left" class="size-4" />
         </button>
-        <span class="font-mono text-[11px] tracking-[.12em] text-muted">
+        <span class="font-mono text-[0.8125rem] tracking-[.1em] text-muted max-sm:text-sm">
           {quranNumber(props.pageIndex + 1)} / {quranNumber(props.pageCount)}
         </span>
         <button

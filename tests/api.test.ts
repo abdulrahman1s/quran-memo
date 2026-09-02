@@ -164,6 +164,9 @@ describe("QuranClient.readingVersesForChapter", () => {
       expect(url.searchParams.get("audio")).toBe("7");
       expect(url.searchParams.has("translations")).toBe(false);
       expect(url.searchParams.get("words")).toBe("true");
+      expect(url.searchParams.get("word_fields")).toContain(
+        "text_uthmani_tajweed",
+      );
       expect(url.searchParams.get("fields")).toContain("page_number");
       expect(url.searchParams.get("fields")).toContain("juz_number");
       expect(url.searchParams.get("fields")).toContain("hizb_number");
@@ -183,6 +186,8 @@ describe("QuranClient.readingVersesForChapter", () => {
               {
                 position: 1,
                 text_uthmani: page === 1 ? "الأولى" : "الثانية",
+                text_uthmani_tajweed:
+                  page === 1 ? "<rule class=ham_wasl>ٱ</rule>لأولى" : "الثانية",
                 char_type_name: "word",
                 audio_url: `wbw/002_00${page}_001.mp3`,
                 translation: {
@@ -211,6 +216,7 @@ describe("QuranClient.readingVersesForChapter", () => {
             text: "الأولى",
             audioUrl: "https://audio.qurancdn.com/wbw/002_001_001.mp3",
             meaning: "the first",
+            tajweedRules: ["ham_wasl"],
           },
         ],
         wordTimings: [{ position: 1, startMs: 0, endMs: 420 }],
@@ -228,6 +234,7 @@ describe("QuranClient.readingVersesForChapter", () => {
             text: "الثانية",
             audioUrl: "https://audio.qurancdn.com/wbw/002_002_001.mp3",
             meaning: "the second",
+            tajweedRules: [],
           },
         ],
         wordTimings: [{ position: 1, startMs: 0, endMs: 420 }],

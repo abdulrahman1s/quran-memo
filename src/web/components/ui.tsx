@@ -9,11 +9,11 @@ export const styles = {
   panel:
     "rounded-3xl border border-white/10 bg-[linear-gradient(145deg,rgba(25,38,33,.92),rgba(17,27,23,.93))] shadow-[0_30px_80px_rgba(0,0,0,.28)] backdrop-blur-xl max-sm:backdrop-blur-none",
   button:
-    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 text-xs font-bold transition hover:border-gold/40 hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-35",
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 text-xs font-bold transition hover:border-gold/40 hover:bg-gold/5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-35",
   primary:
-    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold px-4 text-xs font-bold text-[#172019] transition hover:bg-gold-bright disabled:cursor-not-allowed disabled:opacity-35",
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold px-4 text-xs font-bold text-[#172019] transition hover:bg-gold-bright active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-35",
   eyebrow:
-    "mb-4 text-[11px] font-bold uppercase tracking-[.19em] text-gold rtl:tracking-normal rtl:normal-case",
+    "mb-4 text-[0.6875rem] font-bold uppercase tracking-[.19em] text-gold rtl:tracking-normal rtl:normal-case",
 };
 
 export type Translator = (
@@ -93,6 +93,7 @@ export function CustomSelect(props: {
   options: SelectOption[];
   label: string;
   disabled?: boolean;
+  compact?: boolean;
   wrapSelected?: boolean;
   onChange(value: string): void;
 }) {
@@ -118,7 +119,7 @@ export function CustomSelect(props: {
     >
       <button
         type="button"
-        class="flex min-h-[50px] w-full items-center justify-between gap-3 rounded-[13px] border border-white/15 bg-black/20 px-3.5 text-start text-[13px] font-semibold transition hover:border-gold/50 disabled:opacity-40"
+        class={`flex w-full items-center justify-between gap-3 rounded-[13px] border border-white/15 bg-black/20 px-3.5 text-start text-[0.8125rem] font-semibold transition hover:border-gold/50 active:scale-[.99] disabled:opacity-40 ${props.compact ? "min-h-[46px] max-sm:min-h-11" : "min-h-[50px]"}`}
         aria-label={props.label}
         aria-haspopup="listbox"
         aria-expanded={open()}
@@ -143,7 +144,7 @@ export function CustomSelect(props: {
       <Show when={open()}>
         <div
           role="listbox"
-          class="memo-scrollbar absolute inset-x-0 top-[calc(100%+7px)] z-[70] max-h-[260px] animate-rise overflow-auto rounded-[14px] border border-white/15 bg-panel p-2 shadow-2xl max-sm:fixed max-sm:inset-x-3 max-sm:top-auto max-sm:bottom-[calc(76px+env(safe-area-inset-bottom))] max-sm:max-h-[52dvh] max-sm:rounded-[20px]"
+          class="memo-scrollbar absolute inset-x-0 top-[calc(100%+7px)] z-[70] max-h-[260px] animate-rise overflow-auto rounded-[14px] border border-white/15 bg-panel p-2 shadow-2xl max-sm:fixed max-sm:inset-x-3 max-sm:top-auto max-sm:bottom-[var(--bottom-nav-h)] max-sm:max-h-[52dvh] max-sm:rounded-[20px]"
         >
           <For each={props.options}>
             {(option) => {
@@ -183,7 +184,7 @@ export function Header(props: {
   onNavigate: (tab: MainTab) => void;
 }) {
   return (
-    <header class="grid min-h-[104px] grid-cols-[1fr_auto_1fr] items-center border-b border-white/10 max-md:min-h-[88px] max-md:grid-cols-[1fr_auto]">
+    <header class="grid min-h-[104px] grid-cols-[1fr_auto_1fr] items-center border-b border-white/10 pt-[env(safe-area-inset-top)] max-md:min-h-[88px] max-md:grid-cols-[1fr_auto]">
       <a
         href="/"
         class="inline-flex items-center gap-[13px] text-ink no-underline"
@@ -195,7 +196,7 @@ export function Header(props: {
           <strong class="block font-serif text-[19px] tracking-[.02em]">
             {props.tr("brandName")}
           </strong>
-          <small class="mt-[3px] block text-[11px] tracking-[.08em] text-muted uppercase max-sm:hidden">
+          <small class="mt-[3px] block text-[0.6875rem] tracking-[.08em] text-muted uppercase max-sm:hidden">
             {props.tr("brandTagline")}
           </small>
         </span>
@@ -210,7 +211,7 @@ export function Header(props: {
               type="button"
               aria-current={props.tab === item[0] ? "page" : undefined}
               onClick={() => props.onNavigate(item[0])}
-              class={`flex items-center gap-[7px] rounded-[9px] px-3.5 py-[9px] text-[11px] leading-none font-bold max-sm:flex-1 max-sm:justify-center max-sm:px-2 ${props.tab === item[0] ? "bg-gold text-[#172019]" : "text-muted hover:text-ink"}`}
+              class={`flex items-center gap-[7px] rounded-[9px] px-3.5 py-[9px] text-[0.6875rem] leading-none font-bold transition max-sm:flex-1 max-sm:justify-center max-sm:px-2 ${props.tab === item[0] ? "bg-gold text-[#172019]" : "text-muted hover:text-ink"}`}
             >
               <Icon name={item[1]} class="size-[9px]" />
               {props.tr(item[2])}
@@ -221,14 +222,14 @@ export function Header(props: {
       <div class="flex justify-end">
         <div class="flex gap-1 rounded-xl border border-white/10 p-1">
           <button
-            class={`rounded-lg px-3 py-2 text-[10px] font-bold ${props.language === "en" ? "bg-gold text-[#172019]" : "text-muted"}`}
+            class={`rounded-lg px-3 py-2 text-[0.625rem] font-bold transition ${props.language === "en" ? "bg-gold text-[#172019]" : "text-muted"}`}
             aria-pressed={props.language === "en"}
             onClick={() => props.onLanguage("en")}
           >
             EN
           </button>
           <button
-            class={`rounded-lg px-3 py-2 text-[10px] font-bold ${props.language === "ar" ? "bg-gold text-[#172019]" : "text-muted"}`}
+            class={`rounded-lg px-3 py-2 text-[0.625rem] font-bold transition ${props.language === "ar" ? "bg-gold text-[#172019]" : "text-muted"}`}
             aria-pressed={props.language === "ar"}
             onClick={() => props.onLanguage("ar")}
           >
@@ -257,7 +258,7 @@ export function MobileNavigation(props: {
               type="button"
               aria-current={props.tab === item[0] ? "page" : undefined}
               onClick={() => props.onNavigate(item[0])}
-              class={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] leading-none font-bold transition ${props.tab === item[0] ? "bg-gold/10 text-gold-bright" : "text-muted active:bg-white/5"}`}
+              class={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[0.625rem] leading-none font-bold transition ${props.tab === item[0] ? "bg-gold/10 text-gold-bright" : "text-muted active:bg-white/5"}`}
             >
               <Icon name={item[1]} class="size-[18px]" />
               <span>{props.tr(item[2])}</span>
@@ -295,14 +296,14 @@ export function PanelHeading(props: {
 }) {
   return (
     <div class="mb-6 flex gap-3.5 border-b border-white/10 pb-6 max-sm:mb-4 max-sm:gap-3 max-sm:pb-4">
-      <span class="h-fit rounded-full border border-gold/25 px-2 py-1 text-[9px] font-bold text-gold">
+      <span class="h-fit rounded-full border border-gold/25 px-2 py-1 text-[0.5625rem] font-bold text-gold">
         {props.number}
       </span>
       <div>
         <h2 class="font-serif text-[23px] max-sm:text-xl rtl:font-arabic">
           {props.tr(props.title)}
         </h2>
-        <p class="mt-1 text-xs text-muted max-sm:text-[11px]">
+        <p class="mt-1 text-xs text-muted max-sm:text-[0.6875rem]">
           {props.tr(props.description)}
         </p>
       </div>
@@ -315,7 +316,7 @@ export function Field(props: {
   children: JSX.Element;
 }) {
   return (
-    <label class="my-[19px] grid gap-[9px] text-xs font-semibold tracking-[.02em] text-[#bdc8c1] max-sm:my-3 max-sm:gap-1.5 max-sm:text-[11px]">
+    <label class="my-[19px] grid gap-[9px] text-xs font-semibold tracking-[.02em] text-[#bdc8c1] max-sm:my-3 max-sm:gap-1.5 max-sm:text-[0.6875rem]">
       <span>{props.tr(props.label)}</span>
       {props.children}
     </label>
@@ -336,12 +337,12 @@ export function Preference(props: {
       </span>
       <span class="min-w-0">
         <b class="block text-sm">{props.tr(props.label)}</b>
-        <small class="mt-1 block text-[10px] leading-4 text-muted">
+        <small class="mt-1 block text-[0.625rem] leading-4 text-muted">
           {props.tr(props.description)}
         </small>
       </span>
       <Show when={props.output}>
-        <output class="rounded-full border border-gold/20 px-2.5 py-1.5 font-mono text-[10px] font-bold text-gold-bright">
+        <output class="rounded-full border border-gold/20 px-2.5 py-1.5 font-mono text-[0.625rem] font-bold text-gold-bright">
           {props.output}
         </output>
       </Show>
@@ -356,7 +357,9 @@ export function Stat(props: {
 }) {
   return (
     <div class="rounded-xl border border-white/10 bg-white/[.035] p-3 last:col-span-2">
-      <span class="block text-[10px] text-muted">{props.tr(props.label)}</span>
+      <span class="block text-[0.625rem] text-muted">
+        {props.tr(props.label)}
+      </span>
       <b class="mt-1 block">{props.value}</b>
     </div>
   );
@@ -376,15 +379,15 @@ export function RepeatControl(props: {
   return (
     <div class="rounded-[14px] border border-white/10 bg-white/[.035] p-[13px]">
       <div class="flex items-center justify-between gap-3">
-        <span class="text-[10px] text-muted">{props.label}</span>
+        <span class="text-[0.625rem] text-muted">{props.label}</span>
         <b class="text-sm">
           {props.current} / {props.target}
         </b>
       </div>
-      <div class="mt-3 grid min-h-[42px] grid-cols-[38px_minmax(0,1fr)_38px] overflow-hidden rounded-xl border border-white/10">
+      <div class="mt-3 grid min-h-11 grid-cols-[44px_minmax(0,1fr)_44px] overflow-hidden rounded-xl border border-white/10">
         <button
           type="button"
-          class="grid place-items-center border-e border-white/10 text-lg font-semibold text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-30"
+          class="grid place-items-center border-e border-white/10 text-lg font-semibold text-gold transition hover:bg-gold/10 active:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-30"
           aria-label={`${props.label}: decrease`}
           disabled={props.target <= minimum()}
           onClick={props.onDecrease}
@@ -394,7 +397,7 @@ export function RepeatControl(props: {
         <strong class="grid place-items-center text-sm">{props.target}</strong>
         <button
           type="button"
-          class="grid place-items-center border-s border-white/10 text-lg font-semibold text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-30"
+          class="grid place-items-center border-s border-white/10 text-lg font-semibold text-gold transition hover:bg-gold/10 active:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-30"
           aria-label={`${props.label}: increase`}
           disabled={props.target >= maximum()}
           onClick={props.onIncrease}
@@ -415,9 +418,14 @@ export function SurahList(props: {
   isOffline: (chapter: number, reciter: number) => boolean;
   onToggle: (id: number) => void;
 }) {
+  const number = (value: number, minimumIntegerDigits = 1) =>
+    new Intl.NumberFormat(props.language, {
+      useGrouping: false,
+      minimumIntegerDigits,
+    }).format(value);
   return (
     <div
-      class="memo-scrollbar grid max-h-[610px] grid-cols-2 gap-2 overflow-auto pe-1 max-sm:grid-cols-1"
+      class="memo-scrollbar grid max-h-[610px] grid-cols-2 gap-2.5 overflow-auto pe-1.5 max-sm:grid-cols-1"
       aria-label={props.tr("chooseSurahs")}
     >
       <For each={props.items}>
@@ -429,34 +437,34 @@ export function SurahList(props: {
               role="checkbox"
               aria-checked={checked()}
               onClick={() => props.onToggle(chapter.id)}
-              class={`grid min-h-[70px] grid-cols-[24px_28px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[15px] border p-3 text-start transition ${checked() ? "border-gold/30 bg-gold/10" : "border-transparent bg-white/[.025] hover:border-white/10 hover:bg-white/5"}`}
+              class={`group grid min-h-[86px] grid-cols-[40px_minmax(0,1fr)_28px] items-center gap-3 rounded-[17px] border px-3.5 py-3 text-start transition duration-200 active:scale-[.99] ${checked() ? "border-accent/45 bg-accent-soft shadow-[inset_0_0_0_1px_var(--soft-shadow)]" : "border-hairline bg-panel hover:-translate-y-px hover:border-accent/30 hover:shadow-[0_10px_28px_var(--soft-shadow)]"}`}
             >
               <span
-                class={`grid size-6 place-items-center rounded-lg border ${checked() ? "border-gold bg-gold text-[#122019]" : "border-white/15"}`}
+                class={`grid size-10 place-items-center rounded-full border font-mono text-[0.6875rem] transition ${checked() ? "border-gold/45 bg-gold text-[#132019]" : "border-white/10 bg-black/10 text-muted group-hover:border-gold/30"}`}
               >
-                {checked() && <Icon name="check" class="size-3.5" />}
-              </span>
-              <span class="font-mono text-[10px] text-[#76857d]">
-                {String(chapter.id).padStart(3, "0")}
+                {number(chapter.id, 3)}
               </span>
               <span class="min-w-0">
-                <b class="block truncate text-[13px]">
+                <b
+                  class={`block truncate leading-tight font-bold transition-colors ${props.language === "ar" ? "font-arabic text-[1.25rem]" : "text-[1.0625rem]"} ${checked() ? "text-accent-deep" : "text-ink group-hover:text-accent-deep"}`}
+                  translate="no"
+                >
                   {props.language === "ar"
                     ? chapter.nameArabic
                     : chapter.nameSimple}
                 </b>
-                <small class="mt-1 block truncate text-[10px] text-muted">
-                  {chapter.versesCount} {props.tr("ayahs")}
+                <small class="mt-1.5 block truncate text-[0.6875rem] text-muted">
+                  {number(chapter.versesCount)} {props.tr("ayahs")}
                   {props.isOffline(chapter.id, props.reciter)
                     ? ` · ${props.tr("offlineReady")}`
                     : ""}
                 </small>
               </span>
-              <strong class="font-arabic text-lg font-medium" translate="no">
-                {props.language === "ar"
-                  ? chapter.nameSimple
-                  : chapter.nameArabic}
-              </strong>
+              <span
+                class={`grid size-7 place-items-center rounded-lg border transition ${checked() ? "border-gold bg-gold text-[#132019]" : "border-white/15 text-transparent group-hover:border-gold/35"}`}
+              >
+                <Icon name="check" class="size-3.5" />
+              </span>
             </button>
           );
         }}

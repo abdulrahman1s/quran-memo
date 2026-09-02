@@ -61,6 +61,8 @@ import {
   SurahList as UISurahList,
   styles,
 } from "./components/ui.tsx";
+import { ReciterPicker } from "./components/reciter-picker.tsx";
+import { EmptyState, SkeletonLines } from "./components/feedback.tsx";
 import {
   SettingsView,
   type ArabicFont,
@@ -68,6 +70,7 @@ import {
 } from "./features/settings-view.tsx";
 import { ReadingView } from "./features/reading-view.tsx";
 import { PracticeView as PracticeFeatureView } from "./features/practice-view.tsx";
+import { prioritizeTajweedRules, tajweedRuleCopy } from "./tajweed.ts";
 import { PlayerMasthead } from "./features/player-masthead.tsx";
 import { QuizPanel } from "./features/quiz-panel.tsx";
 
@@ -89,7 +92,9 @@ interface OfflineDownload {
 type OfflineManifest = Record<string, OfflineDownload>;
 
 const defaultPreferences: Preferences = {
+  uiScale: 100,
   arabicFont: "scheherazade",
+  tafsirFont: "noto",
   wordHighlightStyle: "color",
   ayahScale: 100,
   tafsirFontSize: 15,
@@ -168,7 +173,9 @@ export function App() {
     shared.memorization ?? "full",
   );
   const [toast, setToast] = createSignal<{ text: string; error: boolean }>();
+  const [toastExiting, setToastExiting] = createSignal(false);
   let toastTimer: number | undefined;
+  let toastExitTimer: number | undefined;
 
   const storedReading = Number(localStorage.getItem(READING_KEY));
   const [readingChapter, setReadingChapter] = createSignal(
@@ -200,6 +207,8 @@ export function App() {
     createSignal(false);
   const [mushafAudioVisible, setMushafAudioVisible] = createSignal(false);
   const [mushafPlaying, setMushafPlaying] = createSignal(false);
+  const [mushafPlaybackRequested, setMushafPlaybackRequested] =
+    createSignal(false);
   const [mushafAyah, setMushafAyah] = createSignal(0);
   const [mushafTime, setMushafTime] = createSignal(0);
   const [mushafDuration, setMushafDuration] = createSignal(0);
@@ -211,11 +220,17 @@ export function App() {
 
   const rawPreferences = loadJson<Partial<Preferences>>(READER_KEY, {});
   const [preferences, setPreferences] = createSignal<Preferences>({
+    uiScale: bounded(rawPreferences.uiScale, 90, 130, 100),
     arabicFont: ["noto", "amiri", "scheherazade", "system"].includes(
       rawPreferences.arabicFont ?? "",
     )
       ? rawPreferences.arabicFont!
       : "scheherazade",
+    tafsirFont: ["noto", "amiri", "scheherazade", "system"].includes(
+      rawPreferences.tafsirFont ?? "",
+    )
+      ? rawPreferences.tafsirFont!
+      : "noto",
     wordHighlightStyle:
       rawPreferences.wordHighlightStyle === "box" ? "box" : "color",
     ayahScale: bounded(rawPreferences.ayahScale, 75, 150, 100),
@@ -250,6 +265,8 @@ export function App() {
   const [playing, setPlaying] = createSignal(false);
   const [playbackMessage, setPlaybackMessage] = createSignal("");
   const [currentTime, setCurrentTime] = createSignal(0);
+  const [practiceHighlightOverride, setPracticeHighlightOverride] =
+    createSignal<number>();
   const [duration, setDuration] = createSignal(0);
   const [quizChoices, setQuizChoices] = createSignal<QuizChoice[]>([]);
   const [quizAnswer, setQuizAnswer] = createSignal<string>();
@@ -266,6 +283,7 @@ export function App() {
   let standbyAudio!: HTMLAudioElement;
   let readingAudio!: HTMLAudioElement;
   let mushafAudio!: HTMLAudioElement;
+  let mushafStandbyAudio!: HTMLAudioElement;
   let delayTimer: number | undefined;
   let readingWordTimer: number | undefined;
   let mushafSeekHighlightTimer: number | undefined;
@@ -322,8 +340,16 @@ export function App() {
   }
   function notify(text: string, error = false): void {
     clearTimeout(toastTimer);
+    clearTimeout(toastExitTimer);
+    setToastExiting(false);
     setToast({ text, error });
-    toastTimer = window.setTimeout(() => setToast(), 4000);
+    toastTimer = window.setTimeout(() => {
+      setToastExiting(true);
+      toastExitTimer = window.setTimeout(() => {
+        setToast();
+        setToastExiting(false);
+      }, 250);
+    }, 3750);
   }
   function changeLanguage(next: Language, persist = true): void {
     setLanguage(next);
@@ -794,18 +820,27 @@ export function App() {
         mushafAudio.load();
       }
     }
+    if (mushafStandbyAudio) {
+      mushafStandbyAudio.pause();
+      if (removeSource) {
+        mushafStandbyAudio.removeAttribute("src");
+        mushafStandbyAudio.load();
+      }
+    }
     setMushafPlaying(false);
+    setMushafPlaybackRequested(false);
     setMushafTime(0);
     setMushafDuration(0);
     if (hide) setMushafAudioVisible(false);
   }
 
   async function waitForMushafMetadata(): Promise<void> {
-    if (mushafAudio.readyState >= HTMLMediaElement.HAVE_METADATA) return;
+    const element = mushafAudio;
+    if (element.readyState >= HTMLMediaElement.HAVE_METADATA) return;
     await new Promise<void>((resolve, reject) => {
       const cleanup = () => {
-        mushafAudio.removeEventListener("loadedmetadata", loaded);
-        mushafAudio.removeEventListener("error", failed);
+        element.removeEventListener("loadedmetadata", loaded);
+        element.removeEventListener("error", failed);
       };
       const loaded = () => {
         cleanup();
@@ -813,10 +848,10 @@ export function App() {
       };
       const failed = () => {
         cleanup();
-        reject(mushafAudio.error ?? new Error("Audio metadata failed"));
+        reject(element.error ?? new Error("Audio metadata failed"));
       };
-      mushafAudio.addEventListener("loadedmetadata", loaded, { once: true });
-      mushafAudio.addEventListener("error", failed, { once: true });
+      element.addEventListener("loadedmetadata", loaded, { once: true });
+      element.addEventListener("error", failed, { once: true });
     });
   }
 
@@ -835,13 +870,18 @@ export function App() {
       clearTimeout(mushafSeekHighlightTimer);
     mushafSeekHighlightTimer = undefined;
     setMushafSeekWord(seekWordKey);
+    setMushafPlaybackRequested(true);
     setMushafPlaying(false);
     setMushafTime(startSeconds);
     setMushafDuration(0);
     setMushafAyah(next);
     setMushafAudioVisible(true);
     const source = new URL(verse.audioUrl, location.href).href;
-    if (mushafAudio.src !== source) {
+    if (mushafStandbyAudio?.src === source) {
+      const previous = mushafAudio;
+      mushafAudio = mushafStandbyAudio;
+      mushafStandbyAudio = previous;
+    } else if (mushafAudio.src !== source) {
       mushafAudio.src = verse.audioUrl;
       mushafAudio.load();
     }
@@ -863,23 +903,52 @@ export function App() {
       if (request !== mushafPlayRequest) return;
       setMushafSeekWord();
       setMushafPlaying(false);
+      setMushafPlaybackRequested(false);
       notify(tr("playbackFailed"), true);
     }
   }
 
   function preloadNextMushafAyah(index: number): void {
     const nextVerse = reading()?.verses[index + 1];
-    if (!nextVerse || !standbyAudio) return;
+    if (!nextVerse || !mushafStandbyAudio) return;
     const source = new URL(nextVerse.audioUrl, location.href).href;
-    if (standbyAudio.src === source) return;
-    standbyAudio.src = nextVerse.audioUrl;
-    standbyAudio.load();
+    if (mushafStandbyAudio.src === source) return;
+    mushafStandbyAudio.src = nextVerse.audioUrl;
+    mushafStandbyAudio.load();
+  }
+
+  function mushafAudioEnded(element: HTMLAudioElement): void {
+    if (element !== mushafAudio) return;
+    const next = mushafAyah() + 1;
+    if (next < (reading()?.verses.length ?? 0)) void playMushafAyah(next);
+    else {
+      stopMushafAudio();
+      if (autoScroll()) pauseAutoScroll();
+    }
+  }
+
+  function mushafAudioPlaying(element: HTMLAudioElement): void {
+    if (element !== mushafAudio) return;
+    setMushafPlaying(true);
+    setMushafPlaybackRequested(true);
+  }
+
+  function mushafAudioPaused(element: HTMLAudioElement): void {
+    if (element === mushafAudio) setMushafPlaying(false);
+  }
+
+  function mushafAudioTimeUpdated(element: HTMLAudioElement): void {
+    if (element !== mushafAudio) return;
+    setMushafTime(element.currentTime);
+    setMushafDuration(Number.isFinite(element.duration) ? element.duration : 0);
   }
 
   function toggleMushafAudio(): void {
-    if (mushafPlaying()) {
+    if (mushafPlaybackRequested()) {
+      mushafPlayRequest += 1;
       mushafAudio.pause();
       setMushafPlaying(false);
+      setMushafPlaybackRequested(false);
       return;
     }
     if (!mushafAudioVisible() || mushafAudio.ended) {
@@ -895,6 +964,7 @@ export function App() {
       return;
     }
     stopReadingWord();
+    setMushafPlaybackRequested(true);
     mushafAudio.playbackRate = preferences().playbackSpeed / 100;
     void mushafAudio
       .play()
@@ -904,6 +974,7 @@ export function App() {
       })
       .catch(() => {
         setMushafPlaying(false);
+        setMushafPlaybackRequested(false);
         notify(tr("playbackFailed"), true);
       });
   }
@@ -918,7 +989,7 @@ export function App() {
     }
     const previousReciter = readingAudioReciterId;
     const wasVisible = mushafAudioVisible();
-    const wasPlaying = mushafPlaying();
+    const wasPlaying = mushafPlaybackRequested();
     const ayah = mushafAyah();
     const activeVerse = current.verses[ayah];
     const soughtPosition = mushafSeekWord()?.startsWith(
@@ -1038,15 +1109,16 @@ export function App() {
     setOfflineBytes(total);
     localStorage.setItem(OFFLINE_BYTES_KEY, String(total));
   }
-  async function downloadSelected(): Promise<void> {
+  async function downloadChapters(chapterIds: number[]): Promise<void> {
     if (!("caches" in window)) {
       notify(tr("offlineUnsupported"), true);
       return;
     }
-    const ids = [...offlineSelected()];
+    const selectedReciter = offlineReciter();
+    const ids = chapterIds.filter((id) => !isOffline(id, selectedReciter));
     if (!ids.length || downloadProgress()) return;
     try {
-      const payload = await requestSession(ids, offlineReciter());
+      const payload = await requestSession(ids, selectedReciter);
       const groups = payload.groups;
       const total = groups.reduce((sum, group) => sum + group.verses.length, 0);
       let current = 0;
@@ -1071,9 +1143,9 @@ export function App() {
           current += 1;
           setDownloadProgress({ current, total });
         }
-        next[offlineKey(group.chapter.id, offlineReciter())] = {
+        next[offlineKey(group.chapter.id, selectedReciter)] = {
           chapterId: group.chapter.id,
-          reciterId: offlineReciter(),
+          reciterId: selectedReciter,
           audioUrls: urls,
           downloadedAt: Date.now(),
           bytes: chapterBytes,
@@ -1091,6 +1163,14 @@ export function App() {
       setDownloadProgress();
       void refreshCacheSize();
     }
+  }
+  async function downloadSelected(): Promise<void> {
+    await downloadChapters([...offlineSelected()]);
+  }
+  async function downloadAll(): Promise<void> {
+    const ids = chapters().map((chapter) => chapter.id);
+    setOfflineSelected(new Set(ids));
+    await downloadChapters(ids);
   }
   async function removeDownloads(): Promise<void> {
     if (!("caches" in window)) return;
@@ -1115,6 +1195,7 @@ export function App() {
       audio.load();
     }
     setPlaying(false);
+    setPracticeHighlightOverride();
   }
   function preloadNext(): void {
     const groups = session();
@@ -1130,19 +1211,63 @@ export function App() {
       standbyAudio.load();
     }
   }
-  async function playCurrent(force = false): Promise<void> {
+  async function seekPracticeAudio(seconds: number): Promise<void> {
+    const target = Math.max(0, seconds);
+    setCurrentTime(target);
+    const apply = () => {
+      const maximum = Number.isFinite(audio.duration)
+        ? Math.max(0, audio.duration - 0.01)
+        : target;
+      audio.currentTime = Math.min(target, maximum);
+    };
+    if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      apply();
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      let timeout: number | undefined;
+      const finish = () => {
+        clearTimeout(timeout);
+        audio.removeEventListener("loadedmetadata", loaded);
+        audio.removeEventListener("error", finish);
+        resolve();
+      };
+      const loaded = () => {
+        apply();
+        finish();
+      };
+      audio.addEventListener("loadedmetadata", loaded, { once: true });
+      audio.addEventListener("error", finish, { once: true });
+      timeout = window.setTimeout(finish, 5000);
+    });
+  }
+  async function prepareCurrentAudio(
+    force = false,
+    startSeconds?: number,
+  ): Promise<void> {
+    const verse = currentVerse();
+    if (!verse) return;
+    if (force || audio.src !== new URL(verse.audioUrl, location.href).href) {
+      audio.src = verse.audioUrl;
+      audio.load();
+    }
+    audio.playbackRate = preferences().playbackSpeed / 100;
+    if (startSeconds !== undefined) await seekPracticeAudio(startSeconds);
+  }
+  async function playCurrent(
+    force = false,
+    startSeconds?: number,
+    highlightPosition?: number,
+  ): Promise<void> {
     const verse = currentVerse();
     if (!verse) return;
     setQuizChoices([]);
     setQuizAnswer();
     setQuizFinished(false);
     setPlaybackMessage(tr("loadingAudio"));
-    if (force || audio.src !== new URL(verse.audioUrl, location.href).href) {
-      audio.src = verse.audioUrl;
-      audio.load();
-    }
-    audio.playbackRate = preferences().playbackSpeed / 100;
+    setPracticeHighlightOverride(highlightPosition);
     try {
+      await prepareCurrentAudio(force, startSeconds);
       await audio.play();
       setPlaying(true);
       setPlaybackMessage(tr("playingAyah", { key: verse.verseKey }));
@@ -1159,14 +1284,7 @@ export function App() {
     const start = wordStartSeconds(verse.wordTimings ?? [], position);
     if (start === null) return;
     clearDelay();
-    const source = new URL(verse.audioUrl, location.href).href;
-    if (audio.src !== source) {
-      audio.src = verse.audioUrl;
-      audio.load();
-    }
-    audio.currentTime = start;
-    setCurrentTime(start);
-    await playCurrent();
+    await playCurrent(false, start, position);
   }
   function schedulePlay(seconds: number, message: string): void {
     setPlaybackMessage(message);
@@ -1273,6 +1391,7 @@ export function App() {
   }
   function audioEnded(): void {
     setPlaying(false);
+    setPracticeHighlightOverride();
     mode() === "quiz" ? showQuestion() : advancePractice();
   }
   async function startSession(
@@ -1344,35 +1463,94 @@ export function App() {
       setReciterId(next);
       return;
     }
+    const previousQuizPool = quizPool();
+    const previousReciter = reciterId();
     const activeChapter = currentGroup()?.chapter.id;
     const activeVerse = currentVerse()?.verseKey;
+    const activeTime = audio.currentTime || currentTime();
+    const activeTimings = currentVerse()?.wordTimings ?? [];
+    let activePosition = activeWordPosition(activeTimings, activeTime * 1000);
+    if (activePosition === null) {
+      for (const timing of activeTimings) {
+        if (timing.startMs > activeTime * 1000) break;
+        activePosition = timing.position;
+      }
+    }
+    const wasPlaying = playing();
+    const previousGroupIndex = groupIndex();
+    const previousVerseIndex = verseIndex();
     const request = ++sessionRequest;
-    stopPlayback();
+    clearDelay();
+    audio.pause();
+    setPlaying(false);
+    if (activePosition !== null) setPracticeHighlightOverride(activePosition);
     setReciterId(next);
     setSessionLoading(true);
+    setPlaybackMessage(tr("loadingAudio"));
     try {
       const payload = await requestSession(
         previousGroups.map((group) => group.chapter.id),
         next,
       );
       if (request !== sessionRequest) return;
-      setSession(payload.groups);
+      const previousVerses = new Map(
+        previousGroups.flatMap((group) =>
+          group.verses.map((verse) => [verse.verseKey, verse] as const),
+        ),
+      );
+      const refreshedGroups = payload.groups.map((group) => ({
+        ...group,
+        verses: group.verses.map((verse) => ({
+          ...verse,
+          wordTimings: verse.wordTimings?.length
+            ? verse.wordTimings
+            : (previousVerses.get(verse.verseKey)?.wordTimings ?? []),
+        })),
+      }));
+      setSession(refreshedGroups);
       setQuizPool(payload.quizPool);
       const nextGroup = Math.max(
         0,
-        payload.groups.findIndex((group) => group.chapter.id === activeChapter),
+        refreshedGroups.findIndex(
+          (group) => group.chapter.id === activeChapter,
+        ),
       );
       const nextVerse = Math.max(
         0,
-        payload.groups[nextGroup]?.verses.findIndex(
+        refreshedGroups[nextGroup]?.verses.findIndex(
           (verse) => verse.verseKey === activeVerse,
         ) ?? 0,
       );
       setGroupIndex(nextGroup);
       setVerseIndex(nextVerse);
-      await playCurrent(true);
+      const timings =
+        refreshedGroups[nextGroup]?.verses[nextVerse]?.wordTimings;
+      const resumeTime =
+        activePosition === null
+          ? activeTime
+          : (wordStartSeconds(timings ?? [], activePosition) ?? activeTime);
+      if (wasPlaying)
+        await playCurrent(
+          true,
+          resumeTime,
+          activePosition === null ? undefined : activePosition,
+        );
+      else await prepareCurrentAudio(true, resumeTime);
     } catch {
+      if (request !== sessionRequest) return;
+      setReciterId(previousReciter);
+      setSession(previousGroups);
+      setQuizPool(previousQuizPool);
+      setGroupIndex(previousGroupIndex);
+      setVerseIndex(previousVerseIndex);
       notify(tr("sessionUnavailable"), true);
+      if (wasPlaying)
+        await playCurrent(
+          true,
+          activeTime,
+          activePosition === null ? undefined : activePosition,
+        );
+      else await prepareCurrentAudio(true, activeTime);
     } finally {
       if (request === sessionRequest) setSessionLoading(false);
     }
@@ -1388,6 +1566,10 @@ export function App() {
       system: '"Traditional Arabic", Tahoma, serif',
     };
     document.documentElement.style.setProperty(
+      "--ui-font-scale",
+      String(next.uiScale / 100),
+    );
+    document.documentElement.style.setProperty(
       "--ayah-font-size",
       `clamp(${32 * scale}px, ${4.2 * scale}vw, ${58 * scale}px)`,
     );
@@ -1398,6 +1580,10 @@ export function App() {
     document.documentElement.style.setProperty(
       "--reader-arabic-font",
       fonts[next.arabicFont],
+    );
+    document.documentElement.style.setProperty(
+      "--tafsir-arabic-font",
+      fonts[next.tafsirFont],
     );
     if (audio) audio.playbackRate = next.playbackSpeed / 100;
     if (readingAudio) readingAudio.playbackRate = next.playbackSpeed / 100;
@@ -1413,7 +1599,8 @@ export function App() {
       void loadTafsir();
   });
 
-  onMount(() => {
+  function loadCatalog(): void {
+    setCatalogError(false);
     void getJson<CatalogPayload>("/api/catalog")
       .then((value) => {
         setCatalog({ ...value, tafsirs: value.tafsirs ?? [] });
@@ -1425,6 +1612,10 @@ export function App() {
         void refreshCacheSize();
       })
       .catch(() => setCatalogError(true));
+  }
+
+  onMount(() => {
+    loadCatalog();
     const popstate = () => {
       const next = mainTabFromUrl(new URL(location.href));
       stopPlayback();
@@ -1459,6 +1650,7 @@ export function App() {
       stopMushafAudio(true, true);
       pauseAutoScroll();
       clearTimeout(toastTimer);
+      clearTimeout(toastExitTimer);
       clearTimeout(mushafSeekHighlightTimer);
     });
     if ("serviceWorker" in navigator)
@@ -1483,8 +1675,13 @@ export function App() {
           .map((text, index) => ({ position: index + 1, text }));
     return memorizationWords(words, memorization());
   });
-  const highlightedWord = createMemo(() =>
-    activeWordPosition(currentVerse()?.wordTimings ?? [], currentTime() * 1000),
+  const highlightedWord = createMemo(
+    () =>
+      practiceHighlightOverride() ??
+      activeWordPosition(
+        currentVerse()?.wordTimings ?? [],
+        currentTime() * 1000,
+      ),
   );
   const mushafHighlightedWord = createMemo(() => {
     const soughtWord = mushafSeekWord();
@@ -1537,7 +1734,7 @@ export function App() {
     <>
       <div class="pointer-events-none fixed top-[15%] left-[-260px] size-[420px] rounded-full bg-[#8fbf9c] opacity-10 blur-[100px]" />
       <div class="pointer-events-none fixed right-[-280px] bottom-[5%] size-[420px] rounded-full bg-[#c59a50] opacity-10 blur-[100px]" />
-      <div class="relative mx-auto w-[min(1380px,calc(100%-48px))] max-md:pb-[calc(76px+env(safe-area-inset-bottom))] max-sm:w-[calc(100%-24px)]">
+      <div class="relative mx-auto w-[min(1380px,calc(100%-48px))] max-md:pb-[var(--bottom-nav-h)] max-sm:w-[calc(100%-24px)]">
         <Header
           language={language()}
           tab={tab()}
@@ -1570,6 +1767,7 @@ export function App() {
                     loading={sessionLoading()}
                     catalogReady={Boolean(catalog())}
                     catalogError={catalogError()}
+                    retryCatalog={loadCatalog}
                     setReciter={setReciterId}
                     setAyahRepeats={setAyahRepeats}
                     setSurahRepeats={setSurahRepeats}
@@ -1590,6 +1788,7 @@ export function App() {
                 <Show when={tab() === "reading"}>
                   <ReadingView
                     tr={tr}
+                    language={language()}
                     chapters={chapters()}
                     chapterId={readingChapter()}
                     payload={reading()}
@@ -1612,7 +1811,7 @@ export function App() {
                     }
                     seekAyah={(verse) => void seekMushafAudio(verse)}
                     audioVisible={mushafAudioVisible()}
-                    audioPlaying={mushafPlaying()}
+                    audioPlaying={mushafPlaybackRequested()}
                     audioAyah={mushafAyah()}
                     audioTime={mushafTime()}
                     audioDuration={mushafDuration()}
@@ -1620,10 +1819,7 @@ export function App() {
                       activeReciter() ? reciterName(activeReciter()!) : ""
                     }
                     reciterId={reciterId()}
-                    reciterOptions={reciters().map((item) => ({
-                      value: item.id,
-                      label: reciterName(item),
-                    }))}
+                    reciters={reciters()}
                     changeReciter={(value) => void changeMushafReciter(value)}
                     toggleAudio={toggleMushafAudio}
                     previousAudio={() => void playMushafAyah(mushafAyah() - 1)}
@@ -1652,7 +1848,7 @@ export function App() {
             <PlayerView />
           </Show>
         </main>
-        <footer class="flex min-h-[90px] items-center justify-between border-t border-white/10 text-[10px] tracking-wider text-[#6f7c75] uppercase max-sm:flex-col max-sm:items-start max-sm:justify-center max-sm:gap-2">
+        <footer class="flex min-h-[90px] items-center justify-between border-t border-white/10 text-[0.625rem] tracking-wider text-[#6f7c75] uppercase max-sm:flex-col max-sm:items-start max-sm:justify-center max-sm:gap-2">
           <span>{tr("contentCredit")}</span>
           <span class="normal-case">
             Built by{" "}
@@ -1678,10 +1874,10 @@ export function App() {
               class="memo-scrollbar max-h-[calc(100dvh-24px)] w-full max-w-[560px] animate-rise overflow-y-auto rounded-[24px] border border-white/12 bg-[#17251f] p-5 shadow-[0_30px_90px_rgba(0,0,0,.55)] max-md:rounded-b-[18px] md:max-h-[88dvh]"
               onClick={(event) => event.stopPropagation()}
             >
-              <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15 md:hidden" />
-              <header class="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+              <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-ink/15 md:hidden" />
+              <header class="flex items-start justify-between gap-4 border-b border-hairline pb-4">
                 <div>
-                  <span class="text-[10px] font-bold tracking-wider text-gold uppercase">
+                  <span class="text-[0.625rem] font-bold tracking-wider text-gold uppercase">
                     {tr("wordMeaning")}
                   </span>
                   <strong class="font-reader-arabic mt-1 block text-[36px] leading-normal text-ink">
@@ -1691,7 +1887,7 @@ export function App() {
                 <div class="flex items-center gap-2">
                   <button
                     type="button"
-                    class={`inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-[11px] font-bold transition ${
+                    class={`inline-flex min-h-11 items-center gap-2 rounded-full border px-3 text-[0.6875rem] font-bold transition active:scale-[.98] ${
                       readingWord() ===
                       `${insight().verseKey}:${insight().word.position}`
                         ? "border-gold/45 bg-gold/12 text-gold"
@@ -1725,7 +1921,7 @@ export function App() {
                     </span>
                   </button>
                   <button
-                    class="grid size-9 place-items-center rounded-full border border-white/10 text-muted"
+                    class="grid size-11 place-items-center rounded-full border border-hairline text-muted transition hover:border-accent/35 hover:text-accent active:scale-[.96]"
                     aria-label={tr("closePlayer")}
                     onClick={closeReadingInsight}
                   >
@@ -1735,17 +1931,17 @@ export function App() {
               </header>
               <div class="pt-4">
                 <div class="mb-2 flex items-center justify-between gap-4 px-1">
-                  <b class="text-[10px] font-bold tracking-wider text-gold uppercase">
+                  <b class="text-[0.625rem] font-bold tracking-wider text-gold uppercase">
                     {tr("tafsirScope")}
                   </b>
-                  <span class="font-mono text-[10px] text-muted">
+                  <span class="font-mono text-[0.625rem] text-muted">
                     {insight().verseKey}
                   </span>
                 </div>
-                <div class="grid grid-cols-2 rounded-xl border border-white/10 bg-black/15 p-1">
+                <div class="grid grid-cols-2 rounded-xl border border-hairline bg-paper/45 p-1">
                   <button
                     type="button"
-                    class={`min-h-10 rounded-lg px-3 text-xs font-bold transition ${
+                    class={`min-h-11 rounded-lg px-3 text-xs font-bold transition ${
                       readingInsightScope() === "word"
                         ? "bg-gold text-[#142019] shadow-sm"
                         : "text-muted hover:text-ink"
@@ -1757,7 +1953,7 @@ export function App() {
                   </button>
                   <button
                     type="button"
-                    class={`min-h-10 rounded-lg px-3 text-xs font-bold transition ${
+                    class={`min-h-11 rounded-lg px-3 text-xs font-bold transition ${
                       readingInsightScope() === "ayah"
                         ? "bg-gold text-[#142019] shadow-sm"
                         : "text-muted hover:text-ink"
@@ -1771,8 +1967,8 @@ export function App() {
                 <Show
                   when={readingInsightScope() === "ayah"}
                   fallback={
-                    <div class="mt-3 rounded-2xl border border-white/10 bg-black/10 px-4 py-5">
-                      <p class="text-[10px] font-bold tracking-wider text-gold uppercase">
+                    <div class="mt-3 rounded-2xl border border-hairline bg-paper/45 px-4 py-5">
+                      <p class="text-[0.625rem] font-bold tracking-wider text-gold uppercase">
                         {tr(
                           language() === "ar"
                             ? "arabicWordMeaning"
@@ -1783,7 +1979,7 @@ export function App() {
                         when={language() === "ar"}
                         fallback={
                           <p
-                            class="mt-2 text-start text-[17px] leading-7 text-[#d8e0db]"
+                            class="mt-2 text-start text-[17px] leading-7 text-ink"
                             dir="auto"
                           >
                             {insight().word.meaning ?? "—"}
@@ -1791,7 +1987,7 @@ export function App() {
                         }
                       >
                         <p
-                          class="tafsir-reader mt-3 text-start leading-8 text-[#d8e0db]"
+                          class="tafsir-reader mt-3 text-start leading-8 text-ink"
                           dir="rtl"
                         >
                           {readingInsightWordLoading()
@@ -1800,20 +1996,83 @@ export function App() {
                               tr("wordMeaningUnavailable")}
                         </p>
                         <Show when={readingInsightWordMeaning()?.sourceName}>
-                          <div class="mt-4 border-t border-white/8 pt-3 text-start">
-                            <span class="block text-[10px] font-bold text-gold">
+                          <div class="mt-4 border-t border-hairline pt-3 text-start">
+                            <span class="block text-[0.625rem] font-bold text-gold">
                               {readingInsightWordMeaning()?.sourceName}
                             </span>
-                            <span class="mt-1 block text-[10px] text-muted">
+                            <span class="mt-1 block text-[0.625rem] text-muted">
                               {readingInsightWordMeaning()?.sourceAuthor}
                             </span>
                           </div>
                         </Show>
                       </Show>
+                      <div class="mt-5 border-t border-hairline pt-4">
+                        <p class="text-[0.625rem] font-bold tracking-wider text-gold uppercase">
+                          {tr("tajweed")}
+                        </p>
+                        <Show
+                          when={(insight().word.tajweedRules?.length ?? 0) > 0}
+                          fallback={
+                            <p class="mt-2 text-start text-xs leading-6 text-muted">
+                              {tr("tajweedUnavailable")}
+                            </p>
+                          }
+                        >
+                          {(() => {
+                            const rules = () =>
+                              prioritizeTajweedRules(
+                                insight().word.tajweedRules ?? [],
+                              );
+                            const primaryRule = () => rules()[0];
+                            return (
+                              <div class="mt-3">
+                                <Show when={primaryRule()} keyed>
+                                  {(rule) => {
+                                    const copy = () =>
+                                      tajweedRuleCopy(rule, language());
+                                    return (
+                                      <div class="rounded-xl border border-gold/20 bg-gold/5 px-3.5 py-3 text-start">
+                                        <p class="text-xs text-gold">
+                                          <span class="font-bold">
+                                            {tr("tajweedRule")}:
+                                          </span>{" "}
+                                          <b>{copy().name}</b>
+                                        </p>
+                                        <p class="mt-1.5 text-xs leading-6 text-muted">
+                                          {copy().description}
+                                        </p>
+                                      </div>
+                                    );
+                                  }}
+                                </Show>
+                                <Show when={rules().length > 1}>
+                                  <details class="mt-2 rounded-xl border border-hairline bg-paper/45 px-3.5 py-2.5 text-start">
+                                    <summary class="cursor-pointer text-[0.6875rem] font-bold text-muted transition hover:text-gold">
+                                      {tr("otherTajweedRules")}
+                                    </summary>
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                      <For each={rules().slice(1)}>
+                                        {(rule) => (
+                                          <span class="rounded-full border border-hairline px-2.5 py-1 text-[0.625rem] text-muted">
+                                            {
+                                              tajweedRuleCopy(rule, language())
+                                                .name
+                                            }
+                                          </span>
+                                        )}
+                                      </For>
+                                    </div>
+                                  </details>
+                                </Show>
+                              </div>
+                            );
+                          })()}
+                        </Show>
+                      </div>
                     </div>
                   }
                 >
-                  <div class="mt-3 rounded-2xl border border-white/10 bg-black/10 px-4 py-4">
+                  <div class="mt-3 rounded-2xl border border-hairline bg-paper/45 px-4 py-4">
                     <p
                       ref={(element) =>
                         requestAnimationFrame(() =>
@@ -1841,7 +2100,7 @@ export function App() {
                     >
                       <button
                         type="button"
-                        class="mx-auto mt-2 block min-h-7 rounded-full px-3 text-[10px] font-bold text-gold transition hover:bg-gold/8"
+                        class="mx-auto mt-2 block min-h-11 rounded-full px-3 text-[0.625rem] font-bold text-gold transition hover:bg-gold/8"
                         aria-expanded={readingInsightAyahExpanded()}
                         onClick={() =>
                           setReadingInsightAyahExpanded((value) => !value)
@@ -1873,14 +2132,17 @@ export function App() {
                       }}
                     />
                   </div>
-                  <p
-                    class="tafsir-reader memo-scrollbar mt-3 max-h-[38dvh] overflow-auto text-start leading-8 whitespace-pre-line text-[#bdc9c2]"
-                    dir="auto"
+                  <Show
+                    when={!readingInsightLoading()}
+                    fallback={<SkeletonLines count={5} class="mt-5" />}
                   >
-                    {readingInsightLoading()
-                      ? tr("loadingTafsir")
-                      : readingInsightTafsir() || tr("chooseTafsir")}
-                  </p>
+                    <p
+                      class="tafsir-reader memo-scrollbar mt-3 max-h-[38dvh] overflow-auto text-start leading-8 whitespace-pre-line text-muted"
+                      dir="auto"
+                    >
+                      {readingInsightTafsir() || tr("chooseTafsir")}
+                    </p>
+                  </Show>
                 </Show>
               </div>
             </section>
@@ -1891,7 +2153,7 @@ export function App() {
         {(value) => (
           <div
             role="status"
-            class={`fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 animate-rise rounded-xl border px-5 py-3 text-sm shadow-2xl max-md:bottom-[calc(84px+env(safe-area-inset-bottom))] ${value().error ? "border-danger/50 bg-[#3a211f] text-[#ffd6d0]" : "border-white/15 bg-[#21332a]"}`}
+            class={`toast fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 rounded-xl border px-5 py-3 text-sm shadow-[0_18px_50px_var(--strong-shadow)] max-md:bottom-[var(--bottom-nav-h)] ${toastExiting() ? "toast-exit" : ""} ${value().error ? "border-danger/50 bg-danger/10 text-danger" : "border-hairline bg-panel text-ink"}`}
           >
             {value().text}
           </div>
@@ -1904,6 +2166,14 @@ export function App() {
         onTimeUpdate={() => {
           setCurrentTime(audio.currentTime);
           setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+          if (
+            practiceHighlightOverride() !== undefined &&
+            activeWordPosition(
+              currentVerse()?.wordTimings ?? [],
+              audio.currentTime * 1000,
+            ) !== null
+          )
+            setPracticeHighlightOverride();
         }}
         onPlaying={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
@@ -1929,24 +2199,20 @@ export function App() {
         }}
       />
       <audio
-        ref={mushafAudio}
-        preload="metadata"
-        onEnded={() => {
-          const next = mushafAyah() + 1;
-          if (next < (reading()?.verses.length ?? 0)) void playMushafAyah(next);
-          else {
-            stopMushafAudio();
-            if (autoScroll()) pauseAutoScroll();
-          }
-        }}
-        onPlaying={() => setMushafPlaying(true)}
-        onPause={() => setMushafPlaying(false)}
-        onTimeUpdate={() => {
-          setMushafTime(mushafAudio.currentTime);
-          setMushafDuration(
-            Number.isFinite(mushafAudio.duration) ? mushafAudio.duration : 0,
-          );
-        }}
+        ref={(element) => (mushafAudio = element)}
+        preload="auto"
+        onEnded={(event) => mushafAudioEnded(event.currentTarget)}
+        onPlaying={(event) => mushafAudioPlaying(event.currentTarget)}
+        onPause={(event) => mushafAudioPaused(event.currentTarget)}
+        onTimeUpdate={(event) => mushafAudioTimeUpdated(event.currentTarget)}
+      />
+      <audio
+        ref={(element) => (mushafStandbyAudio = element)}
+        preload="auto"
+        onEnded={(event) => mushafAudioEnded(event.currentTarget)}
+        onPlaying={(event) => mushafAudioPlaying(event.currentTarget)}
+        onPause={(event) => mushafAudioPaused(event.currentTarget)}
+        onTimeUpdate={(event) => mushafAudioTimeUpdated(event.currentTarget)}
       />
     </>
   );
@@ -1954,7 +2220,7 @@ export function App() {
   function DownloadsView() {
     const downloadedCount = () => Object.keys(offlineManifest()).length;
     return (
-      <section class="animate-enter py-[76px] max-sm:py-12">
+      <section class="animate-enter py-14 max-md:py-8">
         <Hero
           eyebrow="offlineListening"
           title="downloadsTitle"
@@ -1970,34 +2236,46 @@ export function App() {
               description="downloadSettingsDescription"
             />
             <Field label="reciter">
-              <CustomSelect
-                label={tr("reciter")}
+              <ReciterPicker
+                tr={tr}
+                language={language()}
+                reciters={reciters()}
                 value={offlineReciter()}
-                options={reciters().map((item) => ({
-                  value: item.id,
-                  label: reciterName(item),
-                }))}
-                onChange={(value) => setOfflineReciter(Number(value))}
+                disabled={Boolean(downloadProgress())}
+                onChange={setOfflineReciter}
               />
             </Field>
-            <div class="my-5 rounded-2xl border border-white/10 bg-white/[.025] p-4">
-              <b class="block">
-                {downloadedCount()
-                  ? tr("offlineCount", { count: downloadedCount() })
-                  : tr("noOfflineDownloads")}
-              </b>
-              <small class="mt-1 block text-muted">
-                {tr("offlineStorageNote")}
-              </small>
-            </div>
+            <Show
+              when={downloadedCount()}
+              fallback={
+                <div class="my-5">
+                  <EmptyState
+                    tr={tr}
+                    icon="download"
+                    title="noOfflineDownloads"
+                    hint="noOfflineDownloadsHint"
+                    compact
+                  />
+                </div>
+              }
+            >
+              <div class="my-5 rounded-2xl border border-hairline bg-paper/45 p-4">
+                <b class="block">
+                  {tr("offlineCount", { count: downloadedCount() })}
+                </b>
+                <small class="mt-1 block text-muted">
+                  {tr("offlineStorageNote")}
+                </small>
+              </div>
+            </Show>
             <div class="grid grid-cols-2 gap-2 text-center">
-              <div class="rounded-xl border border-white/10 p-3">
+              <div class="rounded-xl border border-hairline bg-paper/35 p-3">
                 <small class="block text-muted">{tr("downloadSize")}</small>
                 <b class="mt-1 block text-gold">
                   {formatBytes(selectedDownloadSize())}
                 </b>
               </div>
-              <div class="rounded-xl border border-white/10 p-3">
+              <div class="rounded-xl border border-hairline bg-paper/35 p-3">
                 <small class="block text-muted">{tr("cacheSize")}</small>
                 <b class="mt-1 block text-gold">
                   {formatBytes(offlineBytes())}
@@ -2017,6 +2295,20 @@ export function App() {
               </button>
               <button
                 class={button}
+                disabled={
+                  !chapters().length ||
+                  Boolean(downloadProgress()) ||
+                  chapters().every((chapter) =>
+                    isOffline(chapter.id, offlineReciter()),
+                  )
+                }
+                onClick={() => void downloadAll()}
+              >
+                <Icon name="download" />
+                {tr("downloadAllSurahs")}
+              </button>
+              <button
+                class={`${button} col-span-2`}
                 disabled={!downloadedCount() || Boolean(downloadProgress())}
                 onClick={() => void removeDownloads()}
               >
@@ -2057,12 +2349,24 @@ export function App() {
                 {tr("selectVisible")}
               </button>
             </div>
-            <SurahList
-              items={offlineVisible()}
-              values={offlineSelected()}
-              reciter={offlineReciter()}
-              onToggle={(id) => toggleSelection(id, true)}
-            />
+            <Show
+              when={offlineVisible().length > 0 || !offlineSearch()}
+              fallback={
+                <EmptyState
+                  tr={tr}
+                  icon="search"
+                  title="noSearchResults"
+                  hint="noSearchResultsHint"
+                />
+              }
+            >
+              <SurahList
+                items={offlineVisible()}
+                values={offlineSelected()}
+                reciter={offlineReciter()}
+                onToggle={(id) => toggleSelection(id, true)}
+              />
+            </Show>
           </section>
         </div>
       </section>
@@ -2115,7 +2419,7 @@ export function App() {
                 />
                 <div class="flex flex-1 flex-col justify-center px-[3%] text-center">
                   <p
-                    class={`arabic-reader leading-[2] text-[#f7f3e9] ${memorization() === "hidden" ? "text-[20px]! text-muted" : ""}`}
+                    class={`arabic-reader leading-[2] text-ink ${memorization() === "hidden" ? "text-[20px]! text-muted" : ""}`}
                     dir="rtl"
                     lang="ar"
                     translate="no"
@@ -2171,48 +2475,65 @@ export function App() {
                     <span class="h-px flex-1 bg-gradient-to-l from-transparent to-gold/50" />
                   </div>
                   <div class="mx-auto w-[min(760px,100%)]">
-                    <div class="mx-auto mb-4 flex w-fit gap-1 rounded-xl border border-white/10 p-1">
+                    <div class="mx-auto mb-3 flex w-fit gap-1 rounded-xl border border-hairline bg-paper/45 p-1">
                       <button
-                        class={`rounded-lg px-4 py-2 text-xs ${studyTab() === "translation" ? "bg-gold font-bold text-[#172019]" : "text-muted"}`}
+                        class={`min-h-11 rounded-lg px-4 text-xs transition ${studyTab() === "translation" ? "bg-gold font-bold text-[#172019]" : "text-muted hover:text-ink"}`}
                         onClick={() => setStudyTab("translation")}
                       >
                         {tr("translation")}
                       </button>
                       <button
-                        class={`rounded-lg px-4 py-2 text-xs ${studyTab() === "tafsir" ? "bg-gold font-bold text-[#172019]" : "text-muted"}`}
+                        class={`min-h-11 rounded-lg px-4 text-xs transition ${studyTab() === "tafsir" ? "bg-gold font-bold text-[#172019]" : "text-muted hover:text-ink"}`}
                         onClick={() => setStudyTab("tafsir")}
                       >
                         {tr("tafsir")}
                       </button>
                     </div>
                     <Show when={studyTab() === "translation"}>
-                      <p
-                        class="font-serif text-[clamp(16px,1.6vw,21px)] leading-7 text-[#bbc6bf]"
-                        dir="ltr"
-                      >
-                        {verse()!.translation}
-                      </p>
+                      <div class="rounded-[18px] border border-hairline bg-paper/45 px-5 py-4">
+                        <p
+                          class="font-serif text-[clamp(15px,1.5vw,19px)] leading-7 text-muted"
+                          dir="ltr"
+                        >
+                          {verse()!.translation}
+                        </p>
+                      </div>
                     </Show>
                     <Show when={studyTab() === "tafsir"}>
-                      <div class="mx-auto mb-3 max-w-[500px]">
-                        <CustomSelect
-                          label={tr("tafsir")}
-                          value={tafsirId()}
-                          options={localizedTafsirs().map((item) => ({
-                            value: item.id,
-                            label:
-                              language() === "ar"
-                                ? item.nameArabic
-                                : item.nameEnglish,
-                          }))}
-                          onChange={(value) => setTafsirId(Number(value))}
-                        />
+                      <div class="rounded-[18px] border border-hairline bg-paper/45 p-3.5 text-start max-sm:p-3">
+                        <div class="mb-3 flex items-center gap-3 max-sm:block">
+                          <span class="shrink-0 text-[0.625rem] font-bold tracking-wide text-gold uppercase max-sm:mb-2 max-sm:block rtl:tracking-normal rtl:normal-case">
+                            {tr("tafsirSource")}
+                          </span>
+                          <div class="min-w-0 flex-1">
+                            <CustomSelect
+                              label={tr("tafsir")}
+                              value={tafsirId()}
+                              options={localizedTafsirs().map((item) => ({
+                                value: item.id,
+                                label:
+                                  language() === "ar"
+                                    ? item.nameArabic
+                                    : item.nameEnglish,
+                              }))}
+                              onChange={(value) => setTafsirId(Number(value))}
+                            />
+                          </div>
+                        </div>
+                        <div class="border-t border-hairline pt-3">
+                          <Show
+                            when={!tafsirLoading()}
+                            fallback={<SkeletonLines count={4} class="py-2" />}
+                          >
+                            <p
+                              class="tafsir-reader memo-scrollbar max-h-[220px] min-h-[70px] overflow-y-auto px-1 text-start leading-[2.05] whitespace-pre-line text-muted"
+                              dir="auto"
+                            >
+                              {tafsirText() || tr("chooseTafsir")}
+                            </p>
+                          </Show>
+                        </div>
                       </div>
-                      <p class="tafsir-reader memo-scrollbar max-h-[250px] overflow-auto text-start leading-8 whitespace-pre-line text-[#bbc6bf]">
-                        {tafsirLoading()
-                          ? tr("loadingTafsir")
-                          : tafsirText() || tr("chooseTafsir")}
-                      </p>
                     </Show>
                   </div>
                   <Show when={mode() === "quiz" && quizChoices().length}>
@@ -2270,20 +2591,18 @@ export function App() {
             <p class="mt-1 truncate text-sm text-muted">
               {activeReciter() ? reciterName(activeReciter()!) : ""}
             </p>
-            <div class="mt-5 grid gap-3 border-t border-white/10 pt-5">
+            <div class="mt-5 grid gap-3 border-t border-hairline pt-5">
               <Field label="playerReciter">
-                <CustomSelect
-                  label={tr("playerReciter")}
+                <ReciterPicker
+                  tr={tr}
+                  language={language()}
+                  reciters={reciters()}
                   value={reciterId()}
                   disabled={sessionLoading()}
-                  options={reciters().map((item) => ({
-                    value: item.id,
-                    label: reciterName(item),
-                  }))}
-                  onChange={(value) => void switchPlayerReciter(Number(value))}
+                  onChange={(value) => void switchPlayerReciter(value)}
                 />
               </Field>
-              <div class="grid grid-cols-[38px_minmax(0,1fr)_38px] gap-2">
+              <div class="grid grid-cols-[44px_minmax(0,1fr)_44px] gap-2">
                 <button
                   class={button}
                   disabled={
@@ -2349,7 +2668,7 @@ export function App() {
               </div>
             </Show>
             <div class="mt-6">
-              <div class="h-1 overflow-hidden rounded-full bg-white/10">
+              <div class="h-1 overflow-hidden rounded-full bg-ink/10">
                 <i
                   class="block h-full bg-gold"
                   style={{
@@ -2357,14 +2676,14 @@ export function App() {
                   }}
                 />
               </div>
-              <div class="mt-2 flex justify-between font-mono text-[10px] text-muted">
+              <div class="mt-2 flex justify-between font-mono text-[0.625rem] text-muted">
                 <span>{formatTime(currentTime())}</span>
                 <span>{formatTime(duration())}</span>
               </div>
             </div>
             <div class="my-6 flex items-center justify-center gap-4">
               <button
-                class="grid size-11 place-items-center rounded-full border border-white/15"
+                class="grid size-11 place-items-center rounded-full border border-hairline transition hover:border-accent/45 hover:text-accent active:scale-[.96]"
                 disabled={mode() === "quiz"}
                 aria-label={tr("previousAyah")}
                 onClick={() => {
@@ -2377,14 +2696,14 @@ export function App() {
                 <Icon name="left" />
               </button>
               <button
-                class="grid size-16 place-items-center rounded-full bg-gold text-[#122019]"
+                class="grid size-16 place-items-center rounded-full bg-gold text-[#122019] shadow-[0_12px_30px_rgba(216,184,114,.14)] transition hover:bg-gold-bright active:scale-[.97]"
                 aria-label={tr(playing() ? "pause" : "play")}
                 onClick={() => (playing() ? audio.pause() : void playCurrent())}
               >
                 <Icon name={playing() ? "pause" : "play"} class="size-6" />
               </button>
               <button
-                class="grid size-11 place-items-center rounded-full border border-white/15"
+                class="grid size-11 place-items-center rounded-full border border-hairline transition hover:border-accent/45 hover:text-accent active:scale-[.96]"
                 disabled={mode() === "quiz"}
                 aria-label={tr("nextAyah")}
                 onClick={() => {

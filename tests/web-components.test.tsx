@@ -7,6 +7,8 @@ import {
   RepeatControl,
 } from "../src/web/components/ui.tsx";
 import { translate } from "../src/web/i18n.ts";
+import { ReciterPicker } from "../src/web/components/reciter-picker.tsx";
+import { EmptyState, ErrorState } from "../src/web/components/feedback.tsx";
 import { App } from "../src/web/app.tsx";
 import { ReadingView } from "../src/web/features/reading-view.tsx";
 import { SettingsView } from "../src/web/features/settings-view.tsx";
@@ -18,9 +20,54 @@ afterEach(() => {
   dispose?.();
   dispose = undefined;
   document.body.replaceChildren();
+  localStorage.clear();
 });
 
 describe("Solid web components", () => {
+  test("shows reciter identity and recitation style in the shared picker", () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    let selected = 6;
+    dispose = render(
+      () => (
+        <ReciterPicker
+          tr={(key, values) => translate("ar", key, values)}
+          language="ar"
+          reciters={[
+            {
+              id: 6,
+              nameEnglish: "Mahmoud Khalil Al-Husary",
+              nameArabic: "محمود خليل الحصري",
+              style: null,
+            },
+            {
+              id: 8,
+              nameEnglish: "Mohamed Siddiq al-Minshawi",
+              nameArabic: "محمد صديق المنشاوي",
+              style: "Mujawwad",
+            },
+          ]}
+          value={selected}
+          onChange={(value) => {
+            selected = value;
+          }}
+        />
+      ),
+      root,
+    );
+    expect(root.textContent).toContain("محمود خليل الحصري");
+    expect(root.textContent).not.toContain("Mahmoud Khalil Al-Husary");
+    expect(root.textContent).toContain("مرتل");
+    root.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')?.click();
+    expect(root.textContent).toContain("مجود");
+    expect(root.textContent).not.toContain("Mohamed Siddiq al-Minshawi");
+    const minshawi = [
+      ...root.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent?.includes("محمد صديق المنشاوي"));
+    minshawi?.click();
+    expect(selected).toBe(8);
+  });
+
   test("renders navigation state and emits tab changes", () => {
     const root = document.createElement("div");
     document.body.append(root);
@@ -230,6 +277,7 @@ describe("Solid web components", () => {
       () => (
         <ReadingView
           tr={(key, values) => translate("en", key, values)}
+          language="en"
           chapters={[chapter]}
           chapterId={2}
           payload={{
@@ -291,14 +339,21 @@ describe("Solid web components", () => {
           }}
           activeWord="2:1:1"
           boxHighlight={true}
-          audioVisible={false}
+          audioVisible={true}
           audioPlaying={false}
           audioAyah={0}
           audioTime={0}
           audioDuration={0}
           reciterName="Al-Husary"
           reciterId={6}
-          reciterOptions={[{ value: 6, label: "Al-Husary" }]}
+          reciters={[
+            {
+              id: 6,
+              nameEnglish: "Al-Husary",
+              nameArabic: "الحصري",
+              style: "Murattal",
+            },
+          ]}
           changeReciter={() => {}}
           toggleAudio={() => {
             audioToggled = true;
@@ -317,7 +372,45 @@ describe("Solid web components", () => {
     );
     expect(root.textContent).toContain("Juz ١ · Hizb ١");
     expect(root.querySelector('img[src="/besmllah.svg"]')).not.toBeNull();
+    const readingToolbar = root.querySelector<HTMLElement>(
+      "[data-reading-toolbar]",
+    );
+    expect(readingToolbar?.classList.contains("sticky")).toBe(true);
+    expect(readingToolbar?.classList.contains("max-md:fixed")).toBe(true);
+    expect(readingToolbar?.className).toContain(
+      "bottom-[calc(var(--bottom-nav-h)+12px)]",
+    );
+    const mobilePageRow = root.querySelector<HTMLElement>(
+      "[data-mobile-page-row]",
+    );
+    expect(
+      mobilePageRow?.querySelector('[aria-label="Previous page"]'),
+    ).not.toBeNull();
+    expect(mobilePageRow?.querySelector(".reciter-picker")).not.toBeNull();
+    expect(
+      mobilePageRow?.querySelector('[aria-label="Next page"]'),
+    ).not.toBeNull();
+    const mobileSurahRow = root.querySelector<HTMLElement>(
+      "[data-mobile-surah-row]",
+    );
+    expect(
+      mobileSurahRow?.querySelector('[aria-label="Surah"]'),
+    ).not.toBeNull();
+    expect(
+      mobileSurahRow?.querySelector(".reading-mobile-scroll-action"),
+    ).not.toBeNull();
+    expect(
+      root.querySelector<HTMLElement>("[data-mobile-audio-player]")?.className,
+    ).toContain("bottom-[calc(var(--bottom-nav-h)+12px)]");
+    expect(
+      root
+        .querySelector<HTMLButtonElement>(".reading-page-action")
+        ?.classList.contains("hidden"),
+    ).toBe(true);
     expect(root.querySelector("[data-ayah-marker]")?.textContent).toBe("۝١");
+    expect(root.querySelector(".mushaf-verse")?.textContent).toContain(
+      "\u00a0۝١",
+    );
     expect(root.querySelector("[data-ayah-marker]")?.classList).not.toContain(
       "rounded-full",
     );
@@ -369,6 +462,7 @@ describe("Solid web components", () => {
       () => (
         <ReadingView
           tr={(key, values) => translate("en", key, values)}
+          language="en"
           chapters={[chapter]}
           chapterId={1}
           payload={{
@@ -416,7 +510,14 @@ describe("Solid web components", () => {
           audioDuration={0}
           reciterName="Al-Husary"
           reciterId={6}
-          reciterOptions={[{ value: 6, label: "Al-Husary" }]}
+          reciters={[
+            {
+              id: 6,
+              nameEnglish: "Al-Husary",
+              nameArabic: "الحصري",
+              style: "Murattal",
+            },
+          ]}
           changeReciter={() => {}}
           toggleAudio={() => {}}
           previousAudio={() => {}}
@@ -438,7 +539,9 @@ describe("Solid web components", () => {
         <SettingsView
           tr={(key, values) => translate("en", key, values)}
           preferences={{
+            uiScale: 100,
             arabicFont: "noto",
+            tafsirFont: "noto",
             wordHighlightStyle: "color",
             ayahScale: 100,
             tafsirFontSize: 15,
@@ -457,6 +560,8 @@ describe("Solid web components", () => {
     const trigger = root.querySelector<HTMLButtonElement>(
       '[aria-label="Word highlight"]',
     );
+    expect(root.querySelector('[aria-label="App text size"]')).not.toBeNull();
+    expect(root.querySelector('[aria-label="Tafsir typeface"]')).not.toBeNull();
     expect(trigger).not.toBeNull();
     trigger?.click();
     const boxOption = [
@@ -465,6 +570,34 @@ describe("Solid web components", () => {
     expect(boxOption).not.toBeUndefined();
     boxOption?.click();
     expect(highlight).toBe("box");
+  });
+
+  test("renders reusable error and empty feedback states", () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    let retries = 0;
+    dispose = render(
+      () => (
+        <>
+          <ErrorState
+            tr={(key, values) => translate("en", key, values)}
+            message="catalogFailed"
+            onRetry={() => retries++}
+          />
+          <EmptyState
+            tr={(key, values) => translate("en", key, values)}
+            icon="download"
+            title="noOfflineDownloads"
+            hint="noOfflineDownloadsHint"
+          />
+        </>
+      ),
+      root,
+    );
+    root.querySelector<HTMLButtonElement>('[role="alert"] button')?.click();
+    expect(retries).toBe(1);
+    expect(root.textContent).toContain("No downloaded surahs");
+    expect(root.textContent).toContain("Pick surahs above");
   });
 
   test("opens the Downloads tab", async () => {
@@ -491,5 +624,37 @@ describe("Solid web components", () => {
     await Promise.resolve();
     expect(location.search).toContain("view=downloads");
     expect(root.textContent).toContain("Take your recitation anywhere");
+    expect(root.textContent).toContain("Download all surahs");
+  });
+
+  test("shows a toast when preferences reset", async () => {
+    history.replaceState(null, "", "http://localhost/");
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            chapters: [],
+            reciters: [],
+            tafsirs: [],
+            defaultReciterId: 6,
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+      )) as unknown as typeof fetch;
+    const root = document.createElement("div");
+    document.body.append(root);
+    dispose = render(() => <App />, root);
+    const settings = [...root.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Settings"),
+    );
+    settings?.click();
+    await Promise.resolve();
+    const reset = [...root.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Restore defaults"),
+    );
+    reset?.click();
+    expect(root.querySelector('[role="status"]')?.textContent).toContain(
+      "Reading preferences restored",
+    );
   });
 });

@@ -14,7 +14,7 @@ interface QuizPanelProps {
 
 export function QuizPanel(props: QuizPanelProps) {
   return (
-    <div class="mt-8 border-t border-white/10 pt-6">
+    <div class="mt-8 border-t border-hairline pt-6">
       <div class="mb-3 flex justify-between">
         <b class="font-serif text-lg">{props.tr("whichNext")}</b>
         <span class="text-xs text-gold">

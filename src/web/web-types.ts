@@ -1,3 +1,5 @@
+import type { TajweedRuleId } from "../tajweed.ts";
+
 export interface Chapter {
   id: number;
   nameSimple: string;
@@ -38,8 +40,14 @@ export interface Verse {
   wordTimings?: Array<{ position: number; startMs: number; endMs: number }>;
 }
 
-export interface SessionGroup { chapter: Chapter; verses: Verse[] }
-export interface SessionPayload { groups: SessionGroup[]; quizPool: Array<{ verseKey: string; arabic: string }> }
+export interface SessionGroup {
+  chapter: Chapter;
+  verses: Verse[];
+}
+export interface SessionPayload {
+  groups: SessionGroup[];
+  quizPool: Array<{ verseKey: string; arabic: string }>;
+}
 export interface ReadingPayload {
   chapter: Chapter;
   verses: Array<{
@@ -54,6 +62,7 @@ export interface ReadingPayload {
       text: string;
       audioUrl?: string;
       meaning?: string;
+      tajweedRules?: TajweedRuleId[];
     }>;
     wordTimings: Array<{
       position: number;

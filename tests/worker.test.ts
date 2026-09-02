@@ -102,6 +102,9 @@ describe("Cloudflare Worker", () => {
         }
         expect(url.pathname).toBe("/api/v4/verses/by_chapter/1");
         expect(url.searchParams.get("audio")).toBe("6");
+        expect(url.searchParams.get("word_fields")).toContain(
+          "text_uthmani_tajweed",
+        );
         return Response.json({
           verses: [
             {
@@ -118,6 +121,7 @@ describe("Cloudflare Worker", () => {
                 {
                   position: 1,
                   text_uthmani: "الأولى",
+                  text_uthmani_tajweed: "<rule class=ham_wasl>ٱ</rule>لأولى",
                   char_type_name: "word",
                   audio_url: "wbw/001_001_001.mp3",
                   translation: { text: "the first" },
@@ -179,6 +183,7 @@ describe("Cloudflare Worker", () => {
               text: "الأولى",
               audioUrl: "https://audio.qurancdn.com/wbw/001_001_001.mp3",
               meaning: "the first",
+              tajweedRules: ["ham_wasl"],
             },
           ],
           wordTimings: [{ position: 1, startMs: 0, endMs: 400 }],
@@ -197,6 +202,7 @@ describe("Cloudflare Worker", () => {
               text: "الثانية",
               audioUrl: "https://audio.qurancdn.com/wbw/001_002_001.mp3",
               meaning: "the second",
+              tajweedRules: [],
             },
           ],
           wordTimings: [{ position: 1, startMs: 0, endMs: 450 }],

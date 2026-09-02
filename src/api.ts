@@ -6,6 +6,7 @@ import type {
   Verse,
 } from "./types.ts";
 import { REQUEST_CACHE_TTL_MS, type JsonCache } from "./json-cache.ts";
+import { extractTajweedRules } from "./tajweed.ts";
 
 const API_BASE = "https://api.quran.com/api/v4";
 const AUDIO_BASE = "https://verses.quran.foundation/";
@@ -57,6 +58,7 @@ interface VersesResponse {
     words?: Array<{
       position?: number;
       text_uthmani?: string;
+      text_uthmani_tajweed?: string;
       char_type_name?: string;
       audio_url?: string | null;
       translation?: { text?: string; language_name?: string };
@@ -419,7 +421,7 @@ export class QuranClient {
         fields: "text_uthmani,page_number,juz_number,hizb_number",
         audio: String(reciterId),
         words: "true",
-        word_fields: "text_uthmani",
+        word_fields: "text_uthmani,text_uthmani_tajweed",
         per_page: "50",
         page: String(page),
       });
@@ -466,6 +468,7 @@ export class QuranClient {
             .map((word) => ({
               position: word.position!,
               text: word.text_uthmani!,
+              tajweedRules: extractTajweedRules(word.text_uthmani_tajweed),
               ...(typeof word.audio_url === "string"
                 ? {
                     audioUrl: new URL(

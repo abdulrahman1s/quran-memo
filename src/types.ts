@@ -1,3 +1,5 @@
+import type { TajweedRuleId } from "./tajweed.ts";
+
 export interface Chapter {
   id: number;
   nameSimple: string;
@@ -43,6 +45,7 @@ export interface ReadingVerse {
     text: string;
     audioUrl?: string;
     meaning?: string;
+    tajweedRules?: TajweedRuleId[];
   }>;
   wordTimings: Array<{ position: number; startMs: number; endMs: number }>;
 }

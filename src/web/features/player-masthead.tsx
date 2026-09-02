@@ -14,7 +14,7 @@ export function PlayerMasthead(props: PlayerMastheadProps) {
   return (
     <header>
       <div
-        class="grid grid-cols-[1fr_auto] items-center gap-5 text-[11px] tracking-wide text-muted"
+        class="grid grid-cols-[1fr_auto] items-center gap-5 text-[0.6875rem] tracking-wide text-muted"
         dir="ltr"
       >
         <span>
@@ -29,7 +29,7 @@ export function PlayerMasthead(props: PlayerMastheadProps) {
               number: props.number(props.chapter.id),
             })}
           </strong>
-          <span class="h-5 w-px bg-white/10" aria-hidden="true" />
+          <span class="h-5 w-px bg-hairline" aria-hidden="true" />
           <span class="text-gold">
             {props.verse.juzNumber
               ? props.tr("juzAndHizb", {
@@ -41,7 +41,7 @@ export function PlayerMasthead(props: PlayerMastheadProps) {
         </div>
       </div>
       <div
-        class="mt-10 grid grid-cols-[78px_minmax(0,1fr)] items-center gap-[clamp(24px,5vw,64px)] border-b border-white/10 pb-10 max-sm:mt-7 max-sm:grid-cols-[62px_minmax(0,1fr)] max-sm:gap-5 max-sm:pb-7"
+        class="mt-10 grid grid-cols-[78px_minmax(0,1fr)] items-center gap-[clamp(24px,5vw,64px)] border-b border-hairline pb-10 max-sm:mt-7 max-sm:grid-cols-[62px_minmax(0,1fr)] max-sm:gap-5 max-sm:pb-7"
         dir="ltr"
       >
         <span class="grid size-[78px] place-items-center rounded-full border border-gold/30 font-mono text-sm font-semibold text-gold max-sm:size-[62px] max-sm:text-xs">

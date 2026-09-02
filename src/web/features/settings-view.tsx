@@ -12,7 +12,9 @@ import type { MessageKey } from "../i18n.ts";
 export type ArabicFont = "noto" | "amiri" | "scheherazade" | "system";
 export type WordHighlightStyle = "color" | "box";
 export interface ReaderPreferences {
+  uiScale: number;
   arabicFont: ArabicFont;
+  tafsirFont: ArabicFont;
   wordHighlightStyle: WordHighlightStyle;
   ayahScale: number;
   tafsirFontSize: number;
@@ -39,7 +41,7 @@ export function SettingsView(props: SettingsViewProps) {
         ? "scrollSpeedMedium"
         : "scrollSpeedFast";
   return (
-    <section class="w-full animate-enter py-[76px] max-sm:py-12">
+    <section class="w-full animate-enter py-14 max-md:py-8">
       <Hero
         tr={props.tr}
         eyebrow="settingsTab"
@@ -54,6 +56,25 @@ export function SettingsView(props: SettingsViewProps) {
           description="displayAndAudioDescription"
         />
         <div class="grid gap-3">
+          <Preference
+            tr={props.tr}
+            label="appTextSize"
+            description="appTextSizeDescription"
+            icon={<span class="font-sans text-sm font-bold">Aa</span>}
+            output={`${props.preferences.uiScale}%`}
+          >
+            <input
+              type="range"
+              aria-label={props.tr("appTextSize")}
+              min="90"
+              max="130"
+              step="5"
+              value={props.preferences.uiScale}
+              onInput={(event) =>
+                props.update("uiScale", Number(event.currentTarget.value))
+              }
+            />
+          </Preference>
           <Preference
             tr={props.tr}
             label="arabicTypeface"
@@ -71,6 +92,26 @@ export function SettingsView(props: SettingsViewProps) {
               ]}
               onChange={(value) =>
                 props.update("arabicFont", value as ArabicFont)
+              }
+            />
+          </Preference>
+          <Preference
+            tr={props.tr}
+            label="tafsirTypeface"
+            description="tafsirTypefaceDescription"
+            icon={<span>ت</span>}
+          >
+            <CustomSelect
+              label={props.tr("tafsirTypeface")}
+              value={props.preferences.tafsirFont}
+              options={[
+                { value: "noto", label: props.tr("fontNoto") },
+                { value: "scheherazade", label: props.tr("fontScheherazade") },
+                { value: "amiri", label: props.tr("fontAmiri") },
+                { value: "system", label: props.tr("fontSystem") },
+              ]}
+              onChange={(value) =>
+                props.update("tafsirFont", value as ArabicFont)
               }
             />
           </Preference>

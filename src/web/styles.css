@@ -2,11 +2,16 @@
 @source "./";
 
 @theme {
+  --color-paper: #0b1210;
+  --color-panel: #17231f;
   --color-ink: #f2f5f0;
   --color-muted: #9ba9a1;
+  --color-accent: #d8b872;
+  --color-accent-deep: #efd28f;
+  --color-accent-soft: #302b1e;
   --color-gold: #d8b872;
   --color-gold-bright: #efd28f;
-  --color-panel: #17231f;
+  --color-hairline: #ffffff1a;
   --color-danger: #f08b7f;
   --font-serif: Georgia, "Times New Roman", serif;
   --font-arabic: "Noto Naskh Arabic", "Traditional Arabic", serif;
@@ -17,14 +22,38 @@
 
 :root {
   color-scheme: dark;
+  --ui-font-scale: 1;
   --reader-arabic-font: "Scheherazade New", "Noto Naskh Arabic", serif;
+  --tafsir-arabic-font: "Noto Naskh Arabic", "Scheherazade New", serif;
   --ayah-font-size: clamp(32px, 4.2vw, 58px);
   --tafsir-font-size: 15px;
+  --bottom-nav-h: calc(68px + env(safe-area-inset-bottom));
+  --body-background:
+    radial-gradient(
+      circle at 50% -20%,
+      rgba(79, 126, 98, 0.18),
+      transparent 40%
+    ),
+    linear-gradient(145deg, #0a110f, #0e1714 52%, #0a100e);
+  --reading-background:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(216, 184, 114, 0.055),
+      transparent 36%
+    ),
+    linear-gradient(155deg, rgba(22, 35, 30, 0.97), rgba(13, 23, 19, 0.98));
+  --reading-shadow: 0 28px 72px rgba(0, 0, 0, 0.23);
+  --soft-shadow: rgba(0, 0, 0, 0.24);
+  --strong-shadow: rgba(0, 0, 0, 0.48);
+  --skeleton-sheen: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb: rgba(216, 184, 114, 0.25);
+  --scrollbar-thumb-hover: rgba(216, 184, 114, 0.42);
 }
 html {
   min-width: 320px;
+  font-size: calc(16px * var(--ui-font-scale));
   scroll-behavior: smooth;
-  background: #0b1210;
+  background: var(--color-paper);
 }
 html.auto-scrolling {
   scroll-behavior: auto;
@@ -32,14 +61,8 @@ html.auto-scrolling {
 body {
   min-height: 100vh;
   overflow-x: hidden;
-  color: #f2f5f0;
-  background:
-    radial-gradient(
-      circle at 50% -20%,
-      rgba(79, 126, 98, 0.18),
-      transparent 40%
-    ),
-    linear-gradient(145deg, #0a110f, #0e1714 52%, #0a100e);
+  color: var(--color-ink);
+  background: var(--body-background);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 html[dir="rtl"] body {
@@ -57,7 +80,7 @@ select {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #d8b872;
+  outline: 2px solid var(--color-accent);
   outline-offset: 3px;
 }
 [hidden] {
@@ -82,20 +105,14 @@ select:focus-visible {
   word-spacing: normal;
 }
 .tafsir-reader {
-  font-family: var(--reader-arabic-font);
+  font-family: var(--tafsir-arabic-font);
   font-size: var(--tafsir-font-size);
 }
 .reading-sheet {
-  border: 1px solid rgba(255, 255, 255, 0.085);
+  border: 1px solid var(--color-hairline);
   border-radius: 28px;
-  background:
-    radial-gradient(
-      circle at 50% 0%,
-      rgba(216, 184, 114, 0.055),
-      transparent 36%
-    ),
-    linear-gradient(155deg, rgba(22, 35, 30, 0.97), rgba(13, 23, 19, 0.98));
-  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.23);
+  background: var(--reading-background);
+  box-shadow: var(--reading-shadow);
 }
 .mushaf-text {
   font-weight: 500;
@@ -141,10 +158,13 @@ select:focus-visible {
 .basmala-opening {
   margin: 0 auto clamp(32px, 5vw, 54px);
 }
+.basmala-mark {
+  filter: brightness(0) invert(1);
+}
 .mushaf-ayah-marker {
   display: inline;
   margin-inline: 0;
-  color: #d8b872;
+  color: var(--color-gold);
   font-family: "Noto Naskh Arabic", serif;
   font-size: 0.58em;
   font-weight: 600;
@@ -158,87 +178,238 @@ select:focus-visible {
   place-items: center;
   width: 46px;
   height: 46px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-hairline);
   border-radius: 13px;
-  color: #9ba9a1;
+  color: var(--color-muted);
   transition:
     color 150ms ease,
     border-color 150ms ease,
     background-color 150ms ease;
 }
 .reading-page-button {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
 }
 .reading-nav-button:hover,
 .reading-page-button:hover {
-  border-color: rgba(216, 184, 114, 0.35);
-  color: #efd28f;
-  background: rgba(216, 184, 114, 0.05);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+.reading-nav-button:active,
+.reading-page-button:active {
+  transform: scale(0.96);
 }
 .reading-nav-button:disabled,
 .reading-page-button:disabled {
   cursor: not-allowed;
-  opacity: 0.25;
+  opacity: 0.35;
 }
 .reading-mode-button {
   display: inline-flex;
+  width: 100%;
   min-height: 50px;
-  flex: 1;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-hairline);
   border-radius: 13px;
   padding-inline: 16px;
-  color: #9ba9a1;
-  font-size: 11px;
+  color: var(--color-muted);
+  font-size: 0.6875rem;
   font-weight: 700;
   white-space: nowrap;
   transition:
     color 150ms ease,
     border-color 150ms ease;
 }
+.reading-mode-button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reading-control-grid {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+}
+.reading-audio-action,
+.reading-scroll-action {
+  flex: 0 0 170px;
+}
+.reading-reciter-control {
+  min-width: 260px;
+  max-width: 560px;
+  flex: 1 1 420px;
+}
+.reading-page-action {
+  flex: 0 0 125px;
+}
+.reading-secondary-actions {
+  display: contents;
+}
 .reading-mode-button:hover {
-  border-color: rgba(216, 184, 114, 0.35);
-  color: #f2f5f0;
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  color: var(--color-ink);
+}
+.reading-mode-button:focus-visible {
+  border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline: none;
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 .reading-mode-button:disabled {
   cursor: not-allowed;
-  opacity: 0.3;
+  opacity: 0.4;
 }
 .mushaf-player-control {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border-radius: 999px;
-  color: #d7dfda;
+  color: var(--color-ink);
 }
 .mushaf-player-control:disabled {
-  opacity: 0.25;
+  opacity: 0.35;
 }
-@media (max-width: 640px) {
+.reading-player-mini-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+  color: var(--color-muted);
+}
+.reading-player-mini-button:disabled {
+  opacity: 0.35;
+}
+@media (max-width: 768px) {
   .mushaf-text {
-    line-height: 1.9;
-    word-spacing: normal;
+    line-height: 2;
+    text-align: justify;
+    text-align-last: center;
+    text-justify: inter-word;
+    text-wrap: wrap;
+    word-break: normal;
+    overflow-wrap: normal;
+    word-spacing: 0;
+    hyphens: none;
   }
   .reading-nav-button {
-    width: 42px;
-    height: 50px;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
   }
   .reading-mode-button {
-    min-height: 44px;
+    min-height: 40px;
+    padding-inline: 0;
+    font-size: 0.625rem;
+  }
+  .reading-mode-button.hidden {
+    display: none;
+  }
+  .reading-mode-button > span {
+    display: none;
+  }
+  .reading-control-grid {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 4px;
+  }
+  .reading-audio-action {
+    grid-column: 1;
+    order: initial;
+  }
+  .reading-reciter-control {
+    grid-column: 2;
+    min-width: 0;
+    order: initial;
+  }
+  .reading-scroll-action {
+    width: 40px;
+    order: initial;
+  }
+  .reading-page-action {
+    width: 40px;
+    grid-column: auto;
+    order: initial;
+  }
+  .reading-secondary-actions {
+    grid-column: 3;
+    display: flex;
+    gap: 4px;
+  }
+  .reading-reciter-control .reciter-trigger {
+    min-height: 40px;
+    grid-template-columns: minmax(0, 1fr) 16px;
+    gap: 6px;
     padding-inline: 10px;
-    font-size: 10px;
+  }
+  .reading-reciter-control .reciter-disc {
+    display: none;
+  }
+  .reading-reciter-control .reciter-style {
+    display: none;
+  }
+  .reading-surah-row {
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+    gap: 4px;
+  }
+  .reading-surah-row button[aria-haspopup="listbox"] {
+    min-height: 40px;
+    border-radius: 10px;
+    font-size: 0.8125rem;
+  }
+  .reading-player-reciter .reciter-trigger {
+    min-height: 40px;
+    grid-template-columns: minmax(0, 1fr) 16px;
+    gap: 6px;
+    padding-inline: 9px;
+  }
+  .reading-player-reciter .reciter-disc,
+  .reading-player-reciter .reciter-style {
+    display: none;
+  }
+  .reading-mobile-page-row .reading-nav-button {
+    width: 36px;
+    height: 36px;
+    justify-self: center;
+  }
+  .reading-mobile-reciter .reciter-trigger {
+    min-height: 40px;
+    grid-template-columns: minmax(0, 1fr) 16px;
+    gap: 5px;
+    padding-inline: 9px;
+  }
+  .reading-mobile-reciter .reciter-disc,
+  .reading-mobile-reciter .reciter-style {
+    display: none;
+  }
+  .reading-mobile-surah button[aria-haspopup="listbox"] {
+    min-height: 40px;
+    border-radius: 10px;
+    padding-inline: 10px;
+    font-size: 0.8125rem;
+  }
+  .reading-mobile-scroll-action {
+    width: 34px;
+    min-height: 34px;
+    justify-self: end;
+    border-radius: 9px;
+  }
+  .reading-mobile-player .mushaf-player-control {
+    width: 40px;
+    height: 40px;
   }
 }
 .arabic-word {
   transition: color 150ms ease;
 }
 .arabic-word.active {
-  color: #efd28f;
+  color: var(--color-accent);
 }
 .arabic-word.box {
   position: relative;
@@ -274,7 +445,7 @@ button.arabic-word:not(.active):hover {
 }
 input[type="range"] {
   width: 100%;
-  accent-color: #d8b872;
+  accent-color: var(--color-accent);
 }
 input[type="number"] {
   appearance: textfield;
@@ -283,9 +454,81 @@ input[type="number"]::-webkit-inner-spin-button {
   appearance: none;
 }
 
-/* Match the original quiet in-panel scrollbars instead of the OS chrome. */
+/* Quiet in-panel scrollbars instead of the OS chrome. */
 .memo-scrollbar {
-  scrollbar-color: rgba(216, 184, 114, 0.25) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+.memo-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.memo-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.memo-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+}
+.memo-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+.memo-scrollbar::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Shimmering placeholder blocks shown while content loads. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--skeleton-sheen),
+    transparent
+  );
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Toast slides up on entry and back down before removal. */
+.toast {
+  animation: toast-in 0.25s ease both;
+}
+.toast.toast-exit {
+  animation: toast-out 0.25s ease both;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+}
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
 }
 @keyframes enter {
   from {
