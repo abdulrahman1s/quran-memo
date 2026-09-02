@@ -130,17 +130,22 @@ select:focus-visible {
   color: inherit;
   cursor: pointer;
   -webkit-touch-callout: none;
-  touch-action: manipulation;
+  touch-action: pan-y pinch-zoom;
   user-select: none;
   transition:
     color 140ms ease,
     text-shadow 140ms ease;
 }
-.mushaf-word:hover,
 .mushaf-word:focus-visible,
 .mushaf-word.active {
   color: #efd28f;
   text-shadow: 0 0 22px rgba(216, 184, 114, 0.2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .mushaf-word:hover {
+    color: #efd28f;
+    text-shadow: 0 0 22px rgba(216, 184, 114, 0.2);
+  }
 }
 .mushaf-word.box {
   border-radius: 0.16em;
@@ -162,15 +167,42 @@ select:focus-visible {
   filter: brightness(0) invert(1);
 }
 .mushaf-ayah-marker {
-  display: inline;
-  margin-inline: 0;
+  position: relative;
+  display: inline-grid;
+  width: 0.92em;
+  height: 0.92em;
+  margin-inline: 0.04em;
+  place-items: center;
   color: var(--color-gold);
-  font-family: "Noto Naskh Arabic", serif;
-  font-size: 0.58em;
-  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  vertical-align: 0.08em;
+  vertical-align: -0.18em;
+}
+.mushaf-ayah-marker-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.mushaf-ayah-number {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-top: 0.04em;
+  font-family: "Noto Naskh Arabic", Tahoma, Arial, sans-serif;
+  font-size: 0.33em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 .reading-nav-button,
 .reading-page-button {
@@ -286,13 +318,40 @@ select:focus-visible {
 .reading-player-mini-button:disabled {
   opacity: 0.35;
 }
+.app-select-popover {
+  position: fixed;
+  z-index: 100;
+  top: var(--select-top);
+  bottom: var(--select-bottom);
+  left: var(--select-left);
+  width: var(--select-width);
+  max-height: min(260px, var(--select-available));
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.reciter-popover {
+  max-height: min(430px, var(--select-available));
+}
+.select-sheet-backdrop {
+  display: none;
+}
+.select-sheet-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.surah-list-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
 @media (max-width: 768px) {
   .mushaf-text {
-    line-height: 2;
-    text-align: justify;
+    line-height: 1.78;
+    text-align: center;
     text-align-last: center;
-    text-justify: inter-word;
-    text-wrap: wrap;
+    text-wrap: pretty;
     word-break: normal;
     overflow-wrap: normal;
     word-spacing: 0;
@@ -384,6 +443,10 @@ select:focus-visible {
     gap: 5px;
     padding-inline: 9px;
   }
+  .reading-mobile-reciter .reciter-trigger b {
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
   .reading-mobile-reciter .reciter-disc,
   .reading-mobile-reciter .reciter-style {
     display: none;
@@ -394,15 +457,43 @@ select:focus-visible {
     padding-inline: 10px;
     font-size: 0.8125rem;
   }
-  .reading-mobile-scroll-action {
-    width: 34px;
-    min-height: 34px;
-    justify-self: end;
-    border-radius: 9px;
+  .reading-mobile-surah-row > .reading-mode-button {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 10px;
   }
   .reading-mobile-player .mushaf-player-control {
     width: 40px;
     height: 40px;
+  }
+}
+@media (max-width: 768px) {
+  .select-sheet-backdrop {
+    position: fixed;
+    z-index: 90;
+    inset: 0;
+    display: block;
+    background: rgba(0, 0, 0, 0.48);
+    touch-action: none;
+  }
+  .app-select-popover,
+  .reciter-popover {
+    inset: auto 12px calc(var(--bottom-nav-h) + 8px);
+    width: auto;
+    max-height: min(58dvh, calc(100dvh - var(--bottom-nav-h) - 28px));
+    border-radius: 20px;
+  }
+  .reciter-popover {
+    display: flex;
+    max-height: min(68dvh, calc(100dvh - var(--bottom-nav-h) - 28px));
+    flex-direction: column;
+  }
+  .reciter-popover .select-sheet-scroll {
+    min-height: 0;
+  }
+  .surah-list-scroll {
+    max-height: min(62dvh, 610px);
   }
 }
 .arabic-word {

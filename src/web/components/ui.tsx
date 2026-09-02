@@ -1,4 +1,12 @@
-import { For, Show, createSignal, type JSX } from "solid-js";
+import {
+  For,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  type JSX,
+} from "solid-js";
+import { Portal } from "solid-js/web";
 import type { Language, MessageKey } from "../i18n.ts";
 import type { MainTab } from "../navigation.ts";
 import type { Chapter } from "../web-types.ts";
@@ -98,26 +106,71 @@ export function CustomSelect(props: {
   onChange(value: string): void;
 }) {
   const [open, setOpen] = createSignal(false);
+  const [position, setPosition] = createSignal({
+    left: 0,
+    top: "0px",
+    bottom: "auto",
+    width: 0,
+    available: 260,
+  });
   let root!: HTMLDivElement;
+  let trigger!: HTMLButtonElement;
+  let menu: HTMLDivElement | undefined;
   const selected = () =>
     props.options.find(
       (option) => String(option.value) === String(props.value),
     );
+
+  const updatePosition = () => {
+    const rect = trigger?.getBoundingClientRect();
+    if (!rect) return;
+    const below = window.innerHeight - rect.bottom;
+    const above = rect.top;
+    const placeAbove = below < 180 && above > below;
+    setPosition({
+      left: rect.left,
+      top: placeAbove ? "auto" : `${rect.bottom + 7}px`,
+      bottom: placeAbove ? `${window.innerHeight - rect.top + 7}px` : "auto",
+      width: rect.width,
+      available: Math.max(100, (placeAbove ? above : below) - 19),
+    });
+  };
+
+  createEffect(() => {
+    if (!open()) return;
+    updatePosition();
+    const closeOutside = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!root.contains(target) && !menu?.contains(target)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      trigger.focus();
+    };
+    document.addEventListener("pointerdown", closeOutside, true);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    onCleanup(() => {
+      document.removeEventListener("pointerdown", closeOutside, true);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    });
+  });
+
   return (
     <div
       ref={root}
       class="relative"
       onFocusOut={(event) => {
-        if (!root.contains(event.relatedTarget as Node | null)) setOpen(false);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          setOpen(false);
-          root.querySelector<HTMLButtonElement>("button")?.focus();
-        }
+        const target = event.relatedTarget as Node | null;
+        if (!root.contains(target) && !menu?.contains(target)) setOpen(false);
       }}
     >
       <button
+        ref={trigger}
         type="button"
         class={`flex w-full items-center justify-between gap-3 rounded-[13px] border border-white/15 bg-black/20 px-3.5 text-start text-[0.8125rem] font-semibold transition hover:border-gold/50 active:scale-[.99] disabled:opacity-40 ${props.compact ? "min-h-[46px] max-sm:min-h-11" : "min-h-[50px]"}`}
         aria-label={props.label}
@@ -142,35 +195,45 @@ export function CustomSelect(props: {
         />
       </button>
       <Show when={open()}>
-        <div
-          role="listbox"
-          class="memo-scrollbar absolute inset-x-0 top-[calc(100%+7px)] z-[70] max-h-[260px] animate-rise overflow-auto rounded-[14px] border border-white/15 bg-panel p-2 shadow-2xl max-sm:fixed max-sm:inset-x-3 max-sm:top-auto max-sm:bottom-[var(--bottom-nav-h)] max-sm:max-h-[52dvh] max-sm:rounded-[20px]"
-        >
-          <For each={props.options}>
-            {(option) => {
-              const active = () => String(option.value) === String(props.value);
-              return (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={active()}
-                  class={`grid min-h-11 w-full grid-cols-[24px_1fr] items-center gap-2 rounded-[10px] border px-2 text-start text-xs ${active() ? "border-gold/25 bg-gold/10" : "border-transparent hover:bg-white/5"}`}
-                  onClick={() => {
-                    props.onChange(String(option.value));
-                    setOpen(false);
-                  }}
-                >
-                  <span
-                    class={`grid size-[22px] place-items-center rounded-md border ${active() ? "border-gold bg-gold text-[#132019]" : "border-white/15"}`}
+        <Portal>
+          <div
+            class="select-sheet-backdrop"
+            aria-hidden="true"
+            onPointerDown={() => setOpen(false)}
+          />
+          <div
+            ref={menu}
+            role="listbox"
+            class="app-select-popover memo-scrollbar animate-rise overflow-auto rounded-[14px] border border-white/15 bg-panel p-2 shadow-2xl"
+            style={`--select-left:${position().left}px;--select-top:${position().top};--select-bottom:${position().bottom};--select-width:${position().width}px;--select-available:${position().available}px`}
+          >
+            <For each={props.options}>
+              {(option) => {
+                const active = () =>
+                  String(option.value) === String(props.value);
+                return (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={active()}
+                    class={`grid min-h-11 w-full grid-cols-[24px_1fr] items-center gap-2 rounded-[10px] border px-2 text-start text-xs ${active() ? "border-gold/25 bg-gold/10" : "border-transparent hover:bg-white/5"}`}
+                    onClick={() => {
+                      props.onChange(String(option.value));
+                      setOpen(false);
+                    }}
                   >
-                    {active() && <Icon name="check" class="size-3" />}
-                  </span>
-                  <span>{option.label}</span>
-                </button>
-              );
-            }}
-          </For>
-        </div>
+                    <span
+                      class={`grid size-[22px] place-items-center rounded-md border ${active() ? "border-gold bg-gold text-[#132019]" : "border-white/15"}`}
+                    >
+                      {active() && <Icon name="check" class="size-3" />}
+                    </span>
+                    <span>{option.label}</span>
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+        </Portal>
       </Show>
     </div>
   );
@@ -425,7 +488,7 @@ export function SurahList(props: {
     }).format(value);
   return (
     <div
-      class="memo-scrollbar grid max-h-[610px] grid-cols-2 gap-2.5 overflow-auto pe-1.5 max-sm:grid-cols-1"
+      class="surah-list-scroll memo-scrollbar grid max-h-[610px] grid-cols-2 gap-2.5 overflow-auto pe-1.5 max-sm:grid-cols-1"
       aria-label={props.tr("chooseSurahs")}
     >
       <For each={props.items}>

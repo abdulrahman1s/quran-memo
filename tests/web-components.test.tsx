@@ -59,10 +59,12 @@ describe("Solid web components", () => {
     expect(root.textContent).not.toContain("Mahmoud Khalil Al-Husary");
     expect(root.textContent).toContain("مرتل");
     root.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')?.click();
-    expect(root.textContent).toContain("مجود");
-    expect(root.textContent).not.toContain("Mohamed Siddiq al-Minshawi");
+    expect(document.body.textContent).toContain("مجود");
+    expect(document.body.textContent).not.toContain(
+      "Mohamed Siddiq al-Minshawi",
+    );
     const minshawi = [
-      ...root.querySelectorAll<HTMLButtonElement>("button"),
+      ...document.querySelectorAll<HTMLButtonElement>("button"),
     ].find((button) => button.textContent?.includes("محمد صديق المنشاوي"));
     minshawi?.click();
     expect(selected).toBe(8);
@@ -169,9 +171,13 @@ describe("Solid web components", () => {
       '[aria-haspopup="listbox"]',
     );
     trigger?.click();
-    expect(root.querySelector('[role="listbox"]')).not.toBeNull();
-    root.querySelectorAll<HTMLButtonElement>('[role="option"]')[1]?.click();
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    document.querySelectorAll<HTMLButtonElement>('[role="option"]')[1]?.click();
     expect(selected).toBe("minshawi");
+    trigger?.click();
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
   });
 
   test("adjusts repeat settings from the player control", () => {
@@ -386,10 +392,20 @@ describe("Solid web components", () => {
     expect(
       mobilePageRow?.querySelector('[aria-label="Previous page"]'),
     ).not.toBeNull();
+    expect(
+      mobilePageRow
+        ?.querySelector('[aria-label="Previous page"] svg')
+        ?.getAttribute("class"),
+    ).toContain("rtl:rotate-180");
     expect(mobilePageRow?.querySelector(".reciter-picker")).not.toBeNull();
     expect(
       mobilePageRow?.querySelector('[aria-label="Next page"]'),
     ).not.toBeNull();
+    expect(
+      mobilePageRow
+        ?.querySelector('[aria-label="Next page"] svg')
+        ?.getAttribute("class"),
+    ).toContain("rtl:rotate-180");
     const mobileSurahRow = root.querySelector<HTMLElement>(
       "[data-mobile-surah-row]",
     );
@@ -407,10 +423,18 @@ describe("Solid web components", () => {
         .querySelector<HTMLButtonElement>(".reading-page-action")
         ?.classList.contains("hidden"),
     ).toBe(true);
-    expect(root.querySelector("[data-ayah-marker]")?.textContent).toBe("۝١");
-    expect(root.querySelector(".mushaf-verse")?.textContent).toContain(
-      "\u00a0۝١",
+    expect(root.querySelector("[data-ayah-marker]")?.textContent?.trim()).toBe(
+      "١",
     );
+    expect(root.querySelector(".mushaf-verse")?.textContent).toContain(
+      "\u00a0١",
+    );
+    expect(
+      root.querySelector("[data-ayah-marker] .mushaf-ayah-marker-frame"),
+    ).not.toBeNull();
+    expect(
+      root.querySelector("[data-ayah-marker] .mushaf-ayah-number"),
+    ).not.toBeNull();
     expect(root.querySelector("[data-ayah-marker]")?.classList).not.toContain(
       "rounded-full",
     );
@@ -424,6 +448,33 @@ describe("Solid web components", () => {
     await new Promise((resolve) => setTimeout(resolve, 260));
     expect(playedWord).toBe("2:1:1");
     playedWord = "";
+    readingWord?.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        clientX: 20,
+        clientY: 20,
+        pointerType: "touch",
+      }),
+    );
+    readingWord?.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        clientX: 20,
+        clientY: 60,
+        pointerType: "touch",
+      }),
+    );
+    readingWord?.dispatchEvent(
+      new PointerEvent("pointerup", {
+        bubbles: true,
+        clientX: 20,
+        clientY: 60,
+        pointerType: "touch",
+      }),
+    );
+    readingWord?.click();
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(playedWord).toBe("");
     readingWord?.click();
     readingWord?.click();
     readingWord?.dispatchEvent(
@@ -527,7 +578,9 @@ describe("Solid web components", () => {
       ),
       root,
     );
-    expect(root.querySelector("[data-ayah-marker]")?.textContent).toBe("۝١");
+    expect(root.querySelector("[data-ayah-marker]")?.textContent?.trim()).toBe(
+      "١",
+    );
   });
 
   test("offers color and box word highlight preferences", () => {
@@ -565,11 +618,15 @@ describe("Solid web components", () => {
     expect(trigger).not.toBeNull();
     trigger?.click();
     const boxOption = [
-      ...root.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="option"]'),
     ].find((option) => option.textContent?.includes("Filled box"));
     expect(boxOption).not.toBeUndefined();
     boxOption?.click();
     expect(highlight).toBe("box");
+    trigger?.click();
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
   });
 
   test("renders reusable error and empty feedback states", () => {

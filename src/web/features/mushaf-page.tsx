@@ -30,8 +30,11 @@ function MushafWord(props: {
   let holdTimer: number | undefined;
   let clickTimer: number | undefined;
   let held = false;
+  let moved = false;
+  let pointerStarted = false;
   let startX = 0;
   let startY = 0;
+  let startScrollY = 0;
   const cancelHold = () => {
     if (holdTimer !== undefined) clearTimeout(holdTimer);
     holdTimer = undefined;
@@ -54,8 +57,11 @@ function MushafWord(props: {
       onPointerDown={(event) => {
         if (event.pointerType === "mouse" && event.button !== 0) return;
         held = false;
+        moved = false;
+        pointerStarted = true;
         startX = event.clientX;
         startY = event.clientY;
+        startScrollY = window.scrollY;
         cancelClick();
         cancelHold();
         holdTimer = window.setTimeout(() => {
@@ -68,11 +74,25 @@ function MushafWord(props: {
         if (
           Math.abs(event.clientX - startX) > 10 ||
           Math.abs(event.clientY - startY) > 10
-        )
+        ) {
+          moved = true;
           cancelHold();
+        }
       }}
-      onPointerUp={cancelHold}
-      onPointerCancel={cancelHold}
+      onPointerUp={(event) => {
+        cancelHold();
+        if (event.pointerType === "touch" && moved) event.currentTarget.blur();
+      }}
+      onPointerCancel={(event) => {
+        moved = false;
+        pointerStarted = false;
+        cancelHold();
+        event.currentTarget.blur();
+      }}
+      onKeyDown={() => {
+        moved = false;
+        pointerStarted = false;
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         cancelClick();
@@ -81,9 +101,13 @@ function MushafWord(props: {
         props.inspect?.();
       }}
       onClick={(event) => {
-        if (held) {
+        const pageMoved =
+          pointerStarted && Math.abs(window.scrollY - startScrollY) > 1;
+        pointerStarted = false;
+        if (held || moved || pageMoved) {
           event.preventDefault();
           held = false;
+          moved = false;
           return;
         }
         cancelClick();
@@ -113,7 +137,19 @@ function AyahMarker(props: { number: number }) {
       data-ayah-marker
       aria-label={String(props.number)}
     >
-      <span aria-hidden="true">۝{quranNumber(props.number)}</span>
+      <svg
+        class="mushaf-ayah-marker-frame"
+        viewBox="0 0 48 48"
+        fill="none"
+        aria-hidden="true"
+      >
+        <circle cx="24" cy="24" r="17" />
+        <circle cx="24" cy="24" r="13.5" opacity=".72" />
+        <path d="m24 2.5 3.5 4.7L24 12l-3.5-4.8L24 2.5Zm0 33.5 3.5 4.8-3.5 4.7-3.5-4.7L24 36ZM2.5 24l4.7-3.5L12 24l-4.8 3.5L2.5 24ZM36 24l4.8-3.5 4.7 3.5-4.7 3.5L36 24Z" />
+      </svg>
+      <span class="mushaf-ayah-number" aria-hidden="true">
+        {quranNumber(props.number)}
+      </span>
     </span>
   );
 }

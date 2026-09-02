@@ -217,7 +217,7 @@ export function ReadingView(props: ReadingViewProps) {
         disabled={pageIndex() <= 0}
         onClick={() => turnPage(pageIndex() - 1)}
       >
-        <Icon name="left" class="size-3.5" />
+        <Icon name="left" class="size-3.5 rtl:rotate-180" />
       </button>
       <div class="reading-mobile-reciter min-w-0">
         <ReciterPicker
@@ -235,7 +235,7 @@ export function ReadingView(props: ReadingViewProps) {
         disabled={pageIndex() >= pages().length - 1}
         onClick={() => turnPage(pageIndex() + 1)}
       >
-        <Icon name="right" class="size-3.5" />
+        <Icon name="right" class="size-3.5 rtl:rotate-180" />
       </button>
     </div>
   );
@@ -252,7 +252,7 @@ export function ReadingView(props: ReadingViewProps) {
           aria-label={props.tr(props.audioPlaying ? "pauseSurah" : "playSurah")}
           onClick={props.toggleAudio}
         >
-          <Icon name={props.audioPlaying ? "pause" : "play"} />
+          <Icon name={props.audioPlaying ? "pause" : "play"} class="size-4" />
         </button>
       </Show>
       <div class="reading-mobile-surah min-w-0">
@@ -271,7 +271,7 @@ export function ReadingView(props: ReadingViewProps) {
         aria-label={scrollLabel()}
         onClick={toggleScroll}
       >
-        <Icon name={props.scrolling ? "pause" : "scroll"} class="size-3.5" />
+        <Icon name={props.scrolling ? "pause" : "scroll"} class="size-4" />
       </button>
     </div>
   );
